@@ -8,9 +8,6 @@ interface FoodEntry {
   id: string;
   name: string;
   calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
   entry_time: string;
 }
 
@@ -30,13 +27,14 @@ interface Props {
   settings: Settings;
   onGoToKoerper: () => void;
   onSettingsChange: (s: Settings) => void;
+  refreshKey?: number;
 }
 
 function getTodayKey() {
   return new Date().toISOString().split("T")[0];
 }
 
-export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsChange }: Props) {
+export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsChange, refreshKey }: Props) {
   const [entries, setEntries] = useState<FoodEntry[]>([]);
   const [bodyProfile, setBodyProfile] = useState<BodyProfile | null>(null);
   const [productName, setProductName] = useState("");
@@ -53,7 +51,7 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
   const loadEntries = useCallback(async () => {
     const { data } = await supabase
       .from("food_entries")
-      .select("id,name,calories,protein,carbs,fat,entry_time")
+      .select("id,name,calories,entry_time")
       .eq("user_id", userId)
       .eq("entry_date", today)
       .order("created_at", { ascending: false });
@@ -66,13 +64,20 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
       .select("start_weight,goal_weight,current_weight")
       .eq("user_id", userId)
       .maybeSingle();
-    setBodyProfile(data);
+    setBodyProfile(data ?? null);
   }, [userId]);
 
   useEffect(() => {
     loadEntries();
     loadBodyProfile();
   }, [loadEntries, loadBodyProfile]);
+
+  // Reload body profile when profile was saved in KoerperTab
+  useEffect(() => {
+    if (refreshKey !== undefined && refreshKey > 0) {
+      loadBodyProfile();
+    }
+  }, [refreshKey, loadBodyProfile]);
 
   async function handleAdd() {
     if (!productName.trim() || !kcal) return;
@@ -106,13 +111,20 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
     setEditingGoal(false);
   }
 
-  const hasWeightGoal = bodyProfile?.start_weight && bodyProfile?.goal_weight;
-  const weightProgress = hasWeightGoal && bodyProfile?.current_weight
-    ? Math.max(0, Math.min(100,
-        ((bodyProfile.start_weight! - bodyProfile.current_weight) /
-         (bodyProfile.start_weight! - bodyProfile.goal_weight!)) * 100
-      ))
-    : 0;
+  // Weight goal calculations
+  const startW = bodyProfile?.start_weight ?? null;
+  const goalW = bodyProfile?.goal_weight ?? null;
+  const currentW = bodyProfile?.current_weight ?? startW;
+  const hasGoal = startW !== null && goalW !== null;
+
+  let weightProgress = 0;
+  let kgLeft = 0;
+  if (hasGoal && currentW !== null) {
+    const totalDiff = startW! - goalW!;
+    const achieved = startW! - currentW;
+    weightProgress = totalDiff !== 0 ? Math.max(0, Math.min(100, (achieved / totalDiff) * 100)) : 100;
+    kgLeft = Math.max(0, currentW - goalW!);
+  }
 
   return (
     <div className="space-y-3">
@@ -158,9 +170,7 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
               onChange={(e) => setGoalInput(e.target.value)}
               className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
-            <button onClick={saveGoal} className="text-xs bg-gray-700 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800">
-              ✓
-            </button>
+            <button onClick={saveGoal} className="text-xs bg-gray-700 text-white px-3 py-1.5 rounded-lg hover:bg-gray-800">✓</button>
             <button onClick={() => setEditingGoal(false)} className="text-xs text-gray-400">✕</button>
           </div>
         )}
@@ -168,23 +178,37 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
 
       {/* Weight goal card */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-3">
           <span className="font-semibold text-gray-800 text-sm">Gewichtsziel</span>
           <button onClick={onGoToKoerper} className="text-sm text-indigo-500 hover:text-indigo-700">
-            Ziel festlegen →
+            {hasGoal ? "Ziel bearbeiten →" : "Ziel festlegen →"}
           </button>
         </div>
-        <div className="w-full bg-gray-100 rounded-full h-2">
-          <div
-            className="h-2 rounded-full bg-gray-400 transition-all"
-            style={{ width: `${weightProgress}%` }}
-          />
-        </div>
-        <p className="text-xs text-gray-400 text-right mt-1.5">
-          {hasWeightGoal
-            ? `${bodyProfile!.current_weight ?? bodyProfile!.start_weight} kg → ${bodyProfile!.goal_weight} kg`
-            : "Kein Ziel gesetzt"}
-        </p>
+
+        {hasGoal ? (
+          <>
+            <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
+              <div
+                className="h-2 rounded-full bg-emerald-500 transition-all"
+                style={{ width: `${weightProgress}%` }}
+              />
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-gray-400">
+                {currentW !== null ? `Aktuell: ${currentW} kg` : `Start: ${startW} kg`}
+              </span>
+              <span className="text-xs text-gray-500 font-medium">
+                {kgLeft > 0 ? `Noch ${kgLeft.toFixed(1)} kg bis ${goalW} kg` : `Ziel erreicht! 🎉`}
+              </span>
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-xs text-gray-300">{startW} kg</span>
+              <span className="text-xs text-gray-300">Ziel: {goalW} kg</span>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-gray-400">Kein Ziel gesetzt</p>
+        )}
       </div>
 
       {/* Meal entry */}

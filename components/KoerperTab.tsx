@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 
 interface Props {
   userId: string;
+  onProfileSaved?: () => void;
 }
 
 interface BodyProfile {
@@ -12,28 +13,27 @@ interface BodyProfile {
   goal_weight: string;
   height_cm: string;
   age: string;
-  current_weight: string;
 }
 
-export default function KoerperTab({ userId }: Props) {
+export default function KoerperTab({ userId, onProfileSaved }: Props) {
   const [weightInput, setWeightInput] = useState("");
   const [profile, setProfile] = useState<BodyProfile>({
-    start_weight: "", goal_weight: "", height_cm: "", age: "", current_weight: "",
+    start_weight: "", goal_weight: "", height_cm: "", age: "",
   });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [weightSaved, setWeightSaved] = useState(false);
 
   const loadProfile = useCallback(async () => {
     const { data } = await supabase
       .from("body_profile")
-      .select("start_weight,goal_weight,current_weight,height_cm,age")
+      .select("start_weight,goal_weight,height_cm,age")
       .eq("user_id", userId)
       .maybeSingle();
     if (data) {
       setProfile({
         start_weight: data.start_weight?.toString() ?? "",
         goal_weight: data.goal_weight?.toString() ?? "",
-        current_weight: data.current_weight?.toString() ?? "",
         height_cm: data.height_cm?.toString() ?? "",
         age: data.age?.toString() ?? "",
       });
@@ -48,34 +48,46 @@ export default function KoerperTab({ userId }: Props) {
     const w = parseFloat(weightInput);
     const today = new Date().toISOString().split("T")[0];
 
+    // Log the weight entry
     await supabase.from("weight_log").upsert(
       { user_id: userId, weight: w, logged_at: today },
       { onConflict: "user_id,logged_at" }
     );
-    await supabase
-      .from("body_profile")
-      .upsert({ user_id: userId, current_weight: w }, { onConflict: "user_id" });
 
-    setProfile((p) => ({ ...p, current_weight: weightInput }));
+    // Update current_weight in body_profile
+    await supabase.from("body_profile").upsert(
+      { user_id: userId, current_weight: w },
+      { onConflict: "user_id" }
+    );
+
     setWeightInput("");
     setSaving(false);
+    setWeightSaved(true);
+    setTimeout(() => setWeightSaved(false), 2000);
+    onProfileSaved?.();
   }
 
   async function handleSaveProfile() {
     setSaving(true);
-    await supabase.from("body_profile").upsert(
+
+    const { error } = await supabase.from("body_profile").upsert(
       {
         user_id: userId,
         start_weight: profile.start_weight ? parseFloat(profile.start_weight) : null,
         goal_weight: profile.goal_weight ? parseFloat(profile.goal_weight) : null,
         height_cm: profile.height_cm ? parseInt(profile.height_cm) : null,
         age: profile.age ? parseInt(profile.age) : null,
+        updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
     );
+
     setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!error) {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      onProfileSaved?.();
+    }
   }
 
   return (
@@ -100,9 +112,9 @@ export default function KoerperTab({ userId }: Props) {
           <button
             onClick={handleWeightEntry}
             disabled={!weightInput || saving}
-            className="bg-gray-700 hover:bg-gray-800 disabled:opacity-40 text-white font-semibold rounded-xl px-5 py-3 text-sm transition-colors"
+            className="bg-gray-700 hover:bg-gray-800 disabled:opacity-40 text-white font-semibold rounded-xl px-5 py-3 text-sm transition-colors whitespace-nowrap"
           >
-            ✓ Eintragen
+            {weightSaved ? "✓ Eingetragen!" : "✓ Eintragen"}
           </button>
         </div>
       </div>

@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS: Settings = { budget: 2000, deficit: 0 };
 export default function Dashboard({ session }: Props) {
   const [tab, setTab] = useState<Tab>("heute");
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const [profileRefreshKey, setProfileRefreshKey] = useState(0);
   const userId = session.user.id;
   const email = session.user.email ?? "";
 
@@ -51,6 +52,11 @@ export default function Dashboard({ session }: Props) {
     { id: "produkte", label: "Produkte" },
     { id: "verlauf", label: "Verlauf" },
   ];
+
+  function handleProfileSaved() {
+    // Increment refreshKey so TodayTab reloads the body profile
+    setProfileRefreshKey((k) => k + 1);
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f5f5]">
@@ -102,9 +108,15 @@ export default function Dashboard({ session }: Props) {
             settings={settings}
             onSettingsChange={setSettings}
             onGoToKoerper={() => setTab("koerper")}
+            refreshKey={profileRefreshKey}
           />
         )}
-        {tab === "koerper" && <KoerperTab userId={userId} />}
+        {tab === "koerper" && (
+          <KoerperTab
+            userId={userId}
+            onProfileSaved={handleProfileSaved}
+          />
+        )}
         {tab === "produkte" && <ProdukteTab userId={userId} />}
         {tab === "verlauf" && <VerlaufTab userId={userId} budget={settings.budget} />}
       </div>
