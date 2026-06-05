@@ -72,11 +72,8 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
     loadBodyProfile();
   }, [loadEntries, loadBodyProfile]);
 
-  // Reload body profile when profile was saved in KoerperTab
   useEffect(() => {
-    if (refreshKey !== undefined && refreshKey > 0) {
-      loadBodyProfile();
-    }
+    if (refreshKey !== undefined && refreshKey > 0) loadBodyProfile();
   }, [refreshKey, loadBodyProfile]);
 
   async function handleAdd() {
@@ -111,7 +108,6 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
     setEditingGoal(false);
   }
 
-  // Weight goal calculations
   const startW = bodyProfile?.start_weight ?? null;
   const goalW = bodyProfile?.goal_weight ?? null;
   const currentW = bodyProfile?.current_weight ?? startW;
@@ -119,10 +115,10 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
 
   let weightProgress = 0;
   let kgLeft = 0;
-  if (hasGoal && currentW !== null) {
+  if (hasGoal && currentW !== null && startW !== goalW) {
     const totalDiff = startW! - goalW!;
     const achieved = startW! - currentW;
-    weightProgress = totalDiff !== 0 ? Math.max(0, Math.min(100, (achieved / totalDiff) * 100)) : 100;
+    weightProgress = Math.max(0, Math.min(100, (achieved / totalDiff) * 100));
     kgLeft = Math.max(0, currentW - goalW!);
   }
 
@@ -160,7 +156,6 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
         <p className="text-xs text-gray-400 text-right mt-1.5">
           {Math.round(pct)}% von {settings.budget} kcal
         </p>
-
         {editingGoal && (
           <div className="mt-3 flex gap-2 items-center border-t border-gray-100 pt-3">
             <label className="text-xs text-gray-500 whitespace-nowrap">Tagesziel (kcal):</label>
@@ -181,24 +176,20 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
         <div className="flex items-center justify-between mb-3">
           <span className="font-semibold text-gray-800 text-sm">Gewichtsziel</span>
           <button onClick={onGoToKoerper} className="text-sm text-indigo-500 hover:text-indigo-700">
-            {hasGoal ? "Ziel bearbeiten →" : "Ziel festlegen →"}
+            {hasGoal ? "Bearbeiten →" : "Ziel festlegen →"}
           </button>
         </div>
-
         {hasGoal ? (
           <>
             <div className="w-full bg-gray-100 rounded-full h-2 mb-2">
-              <div
-                className="h-2 rounded-full bg-emerald-500 transition-all"
-                style={{ width: `${weightProgress}%` }}
-              />
+              <div className="h-2 rounded-full bg-emerald-500 transition-all" style={{ width: `${weightProgress}%` }} />
             </div>
             <div className="flex justify-between items-center">
               <span className="text-xs text-gray-400">
                 {currentW !== null ? `Aktuell: ${currentW} kg` : `Start: ${startW} kg`}
               </span>
-              <span className="text-xs text-gray-500 font-medium">
-                {kgLeft > 0 ? `Noch ${kgLeft.toFixed(1)} kg bis ${goalW} kg` : `Ziel erreicht! 🎉`}
+              <span className="text-xs font-medium text-gray-500">
+                {kgLeft > 0 ? `Noch ${kgLeft.toFixed(1)} kg bis ${goalW} kg` : "Ziel erreicht! 🎉"}
               </span>
             </div>
             <div className="flex justify-between mt-1">
@@ -217,17 +208,6 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
           Mahlzeit erfassen
         </p>
 
-        <div className="border-2 border-dashed border-purple-200 rounded-xl py-4 flex items-center justify-center gap-2 text-purple-600 cursor-pointer hover:border-purple-300 transition-colors mb-3">
-          <span>📷</span>
-          <span className="text-sm font-medium">Foto aufnehmen oder Galerie</span>
-        </div>
-
-        <div className="flex items-center gap-2 my-3">
-          <div className="flex-1 h-px bg-gray-100" />
-          <span className="text-xs text-gray-400">oder Text</span>
-          <div className="flex-1 h-px bg-gray-100" />
-        </div>
-
         <div className="space-y-2">
           <ProductSearch
             value={productName}
@@ -236,11 +216,8 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
               setProductName(p.name);
               setKcal(String(p.calories));
             }}
+            userId={userId}
           />
-
-          <button className="w-full text-xs text-gray-400 bg-gray-50 hover:bg-gray-100 rounded-xl py-2.5 transition-colors">
-            ✦ KI schätzen + speichern
-          </button>
 
           <div className="flex gap-2">
             <input

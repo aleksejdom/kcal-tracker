@@ -22,7 +22,13 @@ export default function AuthForm() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError(error.message);
     } else {
-      const { error } = await supabase.auth.signUp({ email, password });
+      // Use the current origin so the confirmation email links back to this app, not localhost
+      const redirectTo = typeof window !== "undefined" ? window.location.origin : "";
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: redirectTo },
+      });
       if (error) setError(error.message);
       else setInfo("Bestätigungs-E-Mail gesendet. Bitte prüfe dein Postfach.");
     }
@@ -38,7 +44,6 @@ export default function AuthForm() {
         </div>
 
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
-          {/* Tab switcher */}
           <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
             <button
               type="button"
@@ -105,7 +110,7 @@ export default function AuthForm() {
               disabled={loading}
               className="w-full bg-gray-600 hover:bg-gray-700 disabled:opacity-50 text-white font-semibold rounded-xl py-3 text-sm transition-colors mt-2"
             >
-              {loading ? "..." : tab === "login" ? "Anmelden" : "Konto erstellen"}
+              {loading ? "…" : tab === "login" ? "Anmelden" : "Konto erstellen"}
             </button>
 
             {tab === "register" && (
