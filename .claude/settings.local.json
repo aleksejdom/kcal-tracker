@@ -9,7 +9,18 @@
       "mcp__claude_ai_Supabase__apply_migration",
       "mcp__claude_ai_Vercel__get_deployment_build_logs",
       "PowerShell(vercel env *)",
-      "mcp__claude_ai_Supabase__execute_sql"
+      "mcp__claude_ai_Supabase__execute_sql",
+      "Bash(npx tsc *)",
+      "Bash(npm install *)",
+      "Bash(vercel *)",
+      "Bash(npm run *)",
+      "Read(//c/Users/aleks/**)",
+      "Read(//c/Users/aleks/.vercel/**)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(d.get\\('token','NOT FOUND'\\)[:20]+'...' if d.get\\('token'\\) else 'no token field'\\)\")",
+      "Bash(npx vercel *)",
+      "mcp__claude_ai_Vercel__deploy_to_vercel",
+      "mcp__claude_ai_Supabase__get_project",
+      "Bash(npx next *)"
     ]
   }
 }
