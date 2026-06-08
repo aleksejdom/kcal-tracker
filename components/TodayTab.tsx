@@ -284,12 +284,12 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
               onKeyDown={(e) => e.key === "Enter" && handleSaveSteps()}
               placeholder={todaySteps > 0 ? String(todaySteps) : t.stepsPlaceholder}
               min="0"
-              className="gi flex-1 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 transition-all"
+              className="gi flex-1 min-w-0 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 transition-all"
             />
             <button
               onClick={handleSaveSteps}
               disabled={!stepsInput}
-              className="flex items-center gap-1.5 font-semibold rounded-xl px-4 py-3 text-sm transition-all disabled:opacity-30 text-white whitespace-nowrap"
+              className="flex items-center gap-1.5 font-semibold rounded-xl px-3 py-3 text-sm transition-all disabled:opacity-30 text-white whitespace-nowrap shrink-0"
               style={{ background: "linear-gradient(135deg,#14b8a6,#0d9488)", boxShadow: "0 4px 16px rgba(20,184,166,0.30)" }}
             >
               <Check size={14} /> {t.logSteps}
@@ -346,22 +346,22 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
             />
 
             <div className="flex gap-2">
-              <div className="relative flex-1">
+              <div className="relative flex-1 min-w-0">
                 <input
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  placeholder={t.amount}
+                  placeholder={selectedProduct?.unit === "ml" ? `${t.amount} (ml)` : `${t.amount} (g)`}
                   min="1"
                   disabled={!selectedProduct}
-                  className="gi w-full rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                  className="gi w-full rounded-xl px-3 py-3 pr-9 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-medium">g</span>
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 font-medium">{selectedProduct?.unit === "ml" ? "ml" : "g"}</span>
               </div>
               <button
                 onClick={handleAdd}
                 disabled={!productName.trim() || !amount || !selectedProduct || saving}
-                className="flex items-center gap-1.5 text-white font-semibold rounded-xl px-5 py-3 text-sm transition-all disabled:opacity-30 whitespace-nowrap"
+                className="flex items-center gap-1.5 text-white font-semibold rounded-xl px-3 py-3 text-sm transition-all disabled:opacity-30 whitespace-nowrap shrink-0"
                 style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)", boxShadow: "0 4px 16px rgba(59,130,246,0.30)" }}
               >
                 <Plus size={15} /> {t.addMeal}

@@ -8,7 +8,7 @@ import { useLanguage } from "@/context/LanguageContext";
 
 export interface Product {
   id?: string; name: string; calories: number;
-  protein: number; fat: number; carbs: number;
+  protein: number; fat: number; carbs: number; unit?: string;
 }
 
 interface Props {
@@ -27,6 +27,7 @@ export default function ProductSearch({ value, onChange, onSelect, userId }: Pro
   const [addProtein, setAddProtein] = useState("");
   const [addFat, setAddFat]         = useState("");
   const [addCarbs, setAddCarbs]     = useState("");
+  const [addUnit, setAddUnit]       = useState<"g" | "ml">("g");
   const [addSaving, setAddSaving]   = useState(false);
   const timer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -35,7 +36,7 @@ export default function ProductSearch({ value, onChange, onSelect, userId }: Pro
     if (query.length < 2) { setResults([]); setOpen(false); setShowAddForm(false); return; }
     setLoading(true);
     const { data } = await supabase.from("products")
-      .select("id,name,calories,protein,fat,carbs")
+      .select("id,name,calories,protein,fat,carbs,unit")
       .ilike("name", `%${query}%`).order("name").limit(8);
     setResults(data ?? []);
     setOpen(true);
@@ -65,9 +66,9 @@ export default function ProductSearch({ value, onChange, onSelect, userId }: Pro
       .insert({
         name: value.trim(), calories: parseInt(addKcal),
         protein: parseFloat(addProtein) || 0, fat: parseFloat(addFat) || 0,
-        carbs: parseFloat(addCarbs) || 0, user_id: userId, source: "manual",
+        carbs: parseFloat(addCarbs) || 0, unit: addUnit, user_id: userId, source: "manual",
       })
-      .select("id,name,calories,protein,fat,carbs").single();
+      .select("id,name,calories,protein,fat,carbs,unit").single();
 
     if (error) {
       const { data: existing } = await supabase.from("products")
@@ -82,7 +83,7 @@ export default function ProductSearch({ value, onChange, onSelect, userId }: Pro
       onSelect(data); setOpen(false); setShowAddForm(false);
       toast.success(t.toastProductSaved, { description: data.name });
     }
-    setAddKcal(""); setAddProtein(""); setAddFat(""); setAddCarbs("");
+    setAddKcal(""); setAddProtein(""); setAddFat(""); setAddCarbs(""); setAddUnit("g");
     setAddSaving(false);
   }
 
@@ -114,7 +115,7 @@ export default function ProductSearch({ value, onChange, onSelect, userId }: Pro
                     <span className="text-emerald-600 dark:text-emerald-400 ml-1">E {p.protein}g</span> ·
                     <span className="text-orange-600 dark:text-orange-400 ml-1">F {p.fat}g</span> ·
                     <span className="text-slate-500 ml-1">KH {p.carbs}g</span>
-                    <span className="text-slate-400 dark:text-slate-600 ml-1">/ 100g</span>
+                    <span className="text-slate-400 dark:text-slate-600 ml-1">/ 100{p.unit ?? "g"}</span>
                   </div>
                 </button>
               ))}
@@ -144,7 +145,18 @@ export default function ProductSearch({ value, onChange, onSelect, userId }: Pro
           <p className="text-xs font-semibold text-blue-600 dark:text-blue-300">
             {t.newProductLabel}: <span className="font-bold text-slate-900 dark:text-white">{value}</span>
           </p>
-          <p className="text-xs text-slate-500">{t.per100g}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-slate-500">{t.per100g.replace("100g", `100${addUnit}`)}</p>
+            <div className="ml-auto flex rounded-lg overflow-hidden border border-black/[0.08] dark:border-white/[0.10] text-xs font-semibold">
+              {(["g", "ml"] as const).map((u) => (
+                <button key={u} type="button" onMouseDown={() => setAddUnit(u)}
+                  className={`px-2.5 py-1 transition-colors ${addUnit === u ? "bg-blue-500 text-white" : "text-slate-500 hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"}`}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-2">
             {[
               { label: "kcal *", state: addKcal, set: setAddKcal, step: "1", ph: "350" },

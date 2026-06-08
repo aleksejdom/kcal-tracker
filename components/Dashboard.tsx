@@ -3,16 +3,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { LogOut, Flame, Scale, Package, TrendingDown, Shield, Zap, Sun, Moon } from "lucide-react";
+import { LogOut, Flame, Scale, Package, TrendingDown, Shield, Zap, Sun, Moon, Dumbbell } from "lucide-react";
 import TodayTab from "@/components/TodayTab";
 import KoerperTab from "@/components/KoerperTab";
 import ProdukteTab from "@/components/ProdukteTab";
 import VerlaufTab from "@/components/VerlaufTab";
+import SportTab from "@/components/SportTab";
 import AdminTab from "@/components/AdminTab";
 import { useTheme } from "@/context/ThemeContext";
 import { useLanguage } from "@/context/LanguageContext";
 
-type Tab = "heute" | "koerper" | "produkte" | "verlauf" | "admin";
+type Tab = "heute" | "koerper" | "produkte" | "verlauf" | "sport" | "admin";
 
 interface Settings { budget: number; deficit: number; protein_goal: number | null; }
 interface Props { session: Session; }
@@ -53,6 +54,7 @@ export default function Dashboard({ session }: Props) {
     { id: "koerper"  as Tab, label: t.tabs.koerper,  Icon: Scale },
     { id: "produkte" as Tab, label: t.tabs.produkte, Icon: Package },
     { id: "verlauf"  as Tab, label: t.tabs.verlauf,  Icon: TrendingDown },
+    { id: "sport"    as Tab, label: t.tabs.sport,    Icon: Dumbbell },
     ...(isAdmin ? [{ id: "admin" as Tab, label: t.tabs.admin, Icon: Shield }] : []),
   ];
 
@@ -188,7 +190,7 @@ export default function Dashboard({ session }: Props) {
         {/* ════════════════════════════════════════
             MAIN AREA
         ════════════════════════════════════════ */}
-        <div className="flex-1 flex flex-col min-h-screen min-w-0">
+        <div className="flex-1 flex flex-col min-h-screen min-w-0 overflow-x-hidden">
 
           {/* Mobile header */}
           <header className="lg:hidden px-4 pt-5 pb-3 flex items-center justify-between">
@@ -267,6 +269,7 @@ export default function Dashboard({ session }: Props) {
             )}
             {tab === "produkte" && <ProdukteTab userId={userId} isAdmin={isAdmin} />}
             {tab === "verlauf"  && <VerlaufTab  userId={userId} budget={settings.budget} />}
+            {tab === "sport"    && <SportTab    userId={userId} />}
             {tab === "admin" && isAdmin && <AdminTab currentUserId={userId} />}
           </main>
         </div>

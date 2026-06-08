@@ -10,7 +10,7 @@ const SUPER_ADMIN_ID = "3945cd1d-242d-41c0-a633-d491ef26f999";
 
 interface Product {
   id: string; name: string; calories: number;
-  protein: number; fat: number; carbs: number; user_id: string | null;
+  protein: number; fat: number; carbs: number; unit: string; user_id: string | null;
 }
 type EditForm = { name: string; calories: string; protein: string; fat: string; carbs: string };
 interface Props { userId: string; isAdmin: boolean; }
@@ -24,6 +24,8 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
   const [showForm, setShowForm]   = useState(false);
   const [form, setForm]           = useState<EditForm>({ name: "", calories: "", protein: "", fat: "", carbs: "" });
   const [isGlobal, setIsGlobal]   = useState(false);
+  const [unit, setUnit]           = useState<"g" | "ml">("g");
+  const [editUnit, setEditUnit]   = useState<"g" | "ml">("g");
   const [saving, setSaving]       = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm]   = useState<EditForm>({ name: "", calories: "", protein: "", fat: "", carbs: "" });
@@ -32,7 +34,7 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("products")
-      .select("id,name,calories,protein,fat,carbs,user_id")
+      .select("id,name,calories,protein,fat,carbs,unit,user_id")
       .order("name");
     setProducts(data ?? []);
   }, []);
@@ -48,7 +50,7 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
     const { error: err } = await supabase.from("products").insert({
       name: form.name.trim(), calories: parseInt(form.calories),
       protein: parseFloat(form.protein) || 0, fat: parseFloat(form.fat) || 0,
-      carbs: parseFloat(form.carbs) || 0,
+      carbs: parseFloat(form.carbs) || 0, unit,
       user_id: isSuperAdmin && isGlobal ? null : userId,
       source: "manual",
     });
@@ -57,7 +59,7 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
     else {
       toast.success(t.toastProductSaved, { description: form.name.trim() });
       setForm({ name: "", calories: "", protein: "", fat: "", carbs: "" });
-      setIsGlobal(false);
+      setIsGlobal(false); setUnit("g");
       setShowForm(false);
       await load();
     }
@@ -69,7 +71,7 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
     const { error: err } = await supabase.from("products").update({
       name: editForm.name.trim(), calories: parseInt(editForm.calories),
       protein: parseFloat(editForm.protein) || 0, fat: parseFloat(editForm.fat) || 0,
-      carbs: parseFloat(editForm.carbs) || 0, updated_at: new Date().toISOString(),
+      carbs: parseFloat(editForm.carbs) || 0, unit: editUnit, updated_at: new Date().toISOString(),
     }).eq("id", id);
     setEditSaving(false);
     if (err) toast.error(err.message);
@@ -79,6 +81,7 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
   function startEdit(p: Product) {
     setEditingId(p.id);
     setEditForm({ name: p.name, calories: String(p.calories), protein: String(p.protein), fat: String(p.fat), carbs: String(p.carbs) });
+    setEditUnit((p.unit === "ml" ? "ml" : "g") as "g" | "ml");
   }
 
   function confirmDelete(p: Product) {
@@ -139,7 +142,18 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder={t.productNamePlaceholder} required className={inp}
             />
-            <p className="text-xs text-slate-500">{t.per100g}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-slate-500">{t.per100g.replace("100g", `100${unit}`)}</p>
+              <div className="ml-auto flex rounded-lg overflow-hidden border border-black/[0.08] dark:border-white/[0.10] text-xs font-semibold">
+                {(["g", "ml"] as const).map((u) => (
+                  <button key={u} type="button" onClick={() => setUnit(u)}
+                    className={`px-2.5 py-1 transition-colors ${unit === u ? "bg-blue-500 text-white" : "text-slate-500 hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"}`}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="grid grid-cols-2 gap-2">
               {macroFields.map(({ key, label, placeholder }) => (
                 <div key={key}>
@@ -203,7 +217,18 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
                       className="gi w-full rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                       style={{ borderColor: "rgba(59,130,246,0.40)" }}
                     />
-                    <p className="text-xs text-slate-500">{t.per100g}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs text-slate-500">{t.per100g.replace("100g", `100${editUnit}`)}</p>
+                      <div className="ml-auto flex rounded-lg overflow-hidden border border-black/[0.08] dark:border-white/[0.10] text-xs font-semibold">
+                        {(["g", "ml"] as const).map((u) => (
+                          <button key={u} type="button" onClick={() => setEditUnit(u)}
+                            className={`px-2.5 py-1 transition-colors ${editUnit === u ? "bg-blue-500 text-white" : "text-slate-500 hover:bg-black/[0.04] dark:hover:bg-white/[0.06]"}`}
+                          >
+                            {u}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                     <div className="grid grid-cols-2 gap-2">
                       {macroFields.map(({ key, label, placeholder }) => (
                         <div key={key}>
@@ -246,7 +271,7 @@ export default function ProdukteTab({ userId, isAdmin }: Props) {
                         <span className="text-emerald-600 dark:text-emerald-500 ml-1">E {p.protein}g</span> ·
                         <span className="text-orange-600 dark:text-orange-500 ml-1">F {p.fat}g</span> ·
                         <span className="text-slate-500 ml-1">KH {p.carbs}g</span>
-                        <span className="text-slate-400 dark:text-slate-700 ml-1">/ 100g</span>
+                        <span className="text-slate-400 dark:text-slate-700 ml-1">/ 100{p.unit ?? "g"}</span>
                       </p>
                     </div>
                     {canEdit(p) && (

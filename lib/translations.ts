@@ -3,12 +3,13 @@ export const translations = {
     appName: "Kalorien-Defizit",
     appBy: "by Domowets",
 
-    tabs: { heute: "Heute", koerper: "Körper", produkte: "Produkte", verlauf: "Verlauf", admin: "Admin" },
+    tabs: { heute: "Heute", koerper: "Körper", produkte: "Produkte", verlauf: "Verlauf", sport: "Sport", admin: "Admin" },
     tabSubtitles: {
       heute: "Deine Kalorienbilanz für heute",
       koerper: "Körpermaße & Gewichtsverlauf",
       produkte: "Lebensmitteldatenbank",
       verlauf: "Verlauf der letzten 30 Tage",
+      sport: "Deine Sportaktivitäten & Monats-Challenge",
       admin: "Nutzerverwaltung",
     },
     tagesziel: "Tagesziel",
@@ -148,6 +149,27 @@ export const translations = {
     deleteDayTitle: "Tag löschen?",
     toastDayDeleted: "Tag wurde gelöscht",
 
+    // SportTab
+    sportMonthlyChallenge: "Monats-Challenge",
+    sportLogTitle: "Aktivität eintragen",
+    sportActivityPlaceholder: "z.B. Liegestützen, Laufen…",
+    sportAmount: "Menge",
+    sportWorkouts: "Einträge",
+    sportLastMonth: "Letzter Monat",
+    sportFirstMonth: "Erster Monat – leg los! 💪",
+    sportKeepGoing: "Weiter so",
+    sportNewRecord: "Neuer Rekord! 🏆",
+    sportEqualRecord: "Gleichstand",
+    sportRemaining: "Noch",
+    sportToRecord: "bis zum Rekord",
+    sportNoActivitiesToday: "Noch keine Aktivitäten heute",
+    sportNoActivitiesSubtitle: "Wähle eine Aktivität und trage deine Menge ein",
+    sportShowMore: "weitere anzeigen",
+    sportShowLess: "Weniger anzeigen",
+    toastActivityAdded: "Aktivität eingetragen",
+    toastActivityRemoved: "Aktivität entfernt",
+    sportHistoryLabel: "Sport",
+
     // BMI
     bmiLabel: "BMI",
     bmiTitle: "BMI Auswertung",
@@ -200,12 +222,13 @@ export const translations = {
     appName: "Дефицит калорий",
     appBy: "by Domowets",
 
-    tabs: { heute: "Сегодня", koerper: "Тело", produkte: "Продукты", verlauf: "История", admin: "Админ" },
+    tabs: { heute: "Сегодня", koerper: "Тело", produkte: "Продукты", verlauf: "История", sport: "Спорт", admin: "Админ" },
     tabSubtitles: {
       heute: "Твой калорийный баланс на сегодня",
       koerper: "Параметры тела и вес",
       produkte: "База продуктов питания",
       verlauf: "История за последние 30 дней",
+      sport: "Твои тренировки и ежемесячный челлендж",
       admin: "Управление пользователями",
     },
     tagesziel: "Цель на день",
@@ -344,6 +367,27 @@ export const translations = {
     // VerlaufTab — Tag löschen
     deleteDayTitle: "Удалить день?",
     toastDayDeleted: "День удалён",
+
+    // SportTab
+    sportMonthlyChallenge: "Месячный челлендж",
+    sportLogTitle: "Добавить активность",
+    sportActivityPlaceholder: "напр. Отжимания, Бег…",
+    sportAmount: "Количество",
+    sportWorkouts: "записей",
+    sportLastMonth: "Прошлый месяц",
+    sportFirstMonth: "Первый месяц — вперёд! 💪",
+    sportKeepGoing: "Так держать",
+    sportNewRecord: "Новый рекорд! 🏆",
+    sportEqualRecord: "Ничья",
+    sportRemaining: "Ещё",
+    sportToRecord: "до рекорда",
+    sportNoActivitiesToday: "Сегодня активностей нет",
+    sportNoActivitiesSubtitle: "Выбери активность и введи количество",
+    sportShowMore: "показать ещё",
+    sportShowLess: "Скрыть",
+    toastActivityAdded: "Активность добавлена",
+    toastActivityRemoved: "Активность удалена",
+    sportHistoryLabel: "Спорт",
 
     // BMI
     bmiLabel: "ИМТ",
