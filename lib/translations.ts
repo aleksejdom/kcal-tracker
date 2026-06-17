@@ -112,9 +112,9 @@ export const translations = {
     tipSectionForecast: "Basierend auf deinem aktuellen durchschnittlichen Energiedefizit im gewählten Zeitraum.",
 
     // VerlaufTab — Abweichungs-Interpretation
-    underGoalText: "unter Ziel",
-    overGoalText: "über Ziel",
-    exactGoalText: "Ziel erreicht",
+    underGoalText: "weniger Kalorien gegessen als das Tagesziel",
+    overGoalText: "mehr Kalorien gegessen als das Tagesziel",
+    exactGoalText: "Tagesziel exakt getroffen",
 
     // AdminTab
     userManagementLabel: "Nutzerverwaltung",
@@ -371,9 +371,9 @@ export const translations = {
     tipSectionForecast: "На основе твоего текущего среднего дефицита энергии за выбранный период.",
 
     // VerlaufTab — Abweichungs-Interpretation
-    underGoalText: "ниже цели",
-    overGoalText: "выше цели",
-    exactGoalText: "Цель достигнута",
+    underGoalText: "съедено меньше калорий, чем цель",
+    overGoalText: "съедено больше калорий, чем цель",
+    exactGoalText: "Цель точно достигнута",
 
     // AdminTab
     userManagementLabel: "Управление пользователями",
