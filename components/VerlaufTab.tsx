@@ -53,7 +53,7 @@ function InfoTooltip({ text }: { text: string }) {
       </button>
       {open && (
         <div className="absolute z-50 bottom-full left-0 mb-2 w-64 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-black/[0.06] dark:border-white/[0.10] p-3">
-          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{text}</p>
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">{text}</p>
           {/* Arrow */}
           <div className="absolute top-full left-3">
             <svg width="12" height="6" viewBox="0 0 12 6" className="overflow-visible">
@@ -227,6 +227,12 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     ? Math.round(stepsValues.reduce((s, v) => s + v, 0) / stepsValues.length) : 0;
   const avgDiffAll = history.length > 0
     ? Math.round(history.reduce((s, d) => s + (budget - d.total), 0) / history.length) : 0;
+  const diffDesc = avgDiffAll > 0 ? t.underGoalText : avgDiffAll < 0 ? t.overGoalText : t.exactGoalText;
+  const diffDescColor = avgDiffAll > 0
+    ? "text-emerald-600 dark:text-emerald-400"
+    : avgDiffAll < 0
+      ? "text-red-500 dark:text-red-400"
+      : "text-slate-400";
 
   // Zielanalyse: data for selected period
   const analysisData = useMemo(() => {
@@ -294,6 +300,9 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
               label: t.avgDiffToTarget,
               value: `${avgDiffAll >= 0 ? "+" : ""}${avgDiffAll}`,
               sub: "kcal",
+              description: diffDesc,
+              descColor: diffDescColor,
+              tooltip: t.tipAvgDiff,
               icon: avgDiffAll >= 0
                 ? <TrendingDown size={14} className="text-blue-500 dark:text-blue-400" />
                 : <TrendingUp size={14} className="text-red-500 dark:text-red-400" />,
@@ -312,7 +321,15 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                 {s.value}
                 {"sub" in s && <span className="text-xs font-normal text-slate-500 ml-0.5">{s.sub}</span>}
               </p>
-              <p className="text-xs text-slate-500 mt-0.5 leading-tight">{s.label}</p>
+              {"description" in s && "descColor" in s && s.description && (
+                <p className={`text-[11px] font-semibold mt-1 leading-tight ${s.descColor}`}>
+                  {s.description}
+                </p>
+              )}
+              <div className="flex items-center justify-center gap-0.5 mt-0.5">
+                <p className="text-xs text-slate-500 leading-tight">{s.label}</p>
+                {"tooltip" in s && s.tooltip && <InfoTooltip text={s.tooltip} />}
+              </div>
             </div>
           ))}
         </div>

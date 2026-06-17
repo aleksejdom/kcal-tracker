@@ -71,7 +71,7 @@ export const translations = {
     daysTracked: "Tage erfasst",
     inGoal: "Im Ziel",
     avgDeficit: "Ø Defizit",
-    avgDiffToTarget: "Ø Differenz",
+    avgDiffToTarget: "Ø Abweichung",
     historyTitle: "Verlauf (30 Tage)",
     noHistory: "Noch kein Verlauf vorhanden",
     noHistorySubtitle: "Trage deine erste Mahlzeit ein",
@@ -100,7 +100,7 @@ export const translations = {
     tipTdee: "Geschätzter Tagesverbrauch deines Körpers (Grundumsatz + Alltag + Aktivität). Basis für alle Defizit-Berechnungen.",
     tipPlannedDeficit: "Theoretisches Defizit: TDEE − Kalorienziel. Je größer, desto schneller nimmst du ab – aber nicht zu hoch!",
     tipAvgCalorieIntake: "Durchschnittliche Kalorienaufnahme im gewählten Zeitraum (7 oder 30 Tage).",
-    tipAvgDiff: "Kalorienziel − Ø Aufnahme. Positiv = du liegst unter deinem Ziel (gut!). Negativ = du liegst über deinem Ziel.",
+    tipAvgDiff: "Kalorienziel − Ø Kalorienaufnahme.\n\n+ (positiv) → unter Ziel ✓\n− (negativ) → über Ziel\n0 → Ziel exakt getroffen",
     tipAvgEnergyDeficit: "TDEE − Ø Aufnahme. Dein tatsächliches mittleres Energiedefizit. Diese Zahl bestimmt dein Abnehmtempo.",
     tipRemainingWeight: "Aktuelles Gewicht − Zielgewicht. Wie viele kg bis zum Zielgewicht noch fehlen.",
     tipRemainingKcal: "Restgewicht × 7700 kcal. Die gesamte Energie, die noch eingespart werden muss, um dein Zielgewicht zu erreichen.",
@@ -110,6 +110,11 @@ export const translations = {
     tipSectionPlanned: "Basierend auf deinem Kalorienziel und deinem geschätzten Tagesverbrauch.",
     tipSectionActual: "Basierend auf deinen tatsächlich erfassten Mahlzeiten im gewählten Zeitraum.",
     tipSectionForecast: "Basierend auf deinem aktuellen durchschnittlichen Energiedefizit im gewählten Zeitraum.",
+
+    // VerlaufTab — Abweichungs-Interpretation
+    underGoalText: "unter Ziel",
+    overGoalText: "über Ziel",
+    exactGoalText: "Ziel erreicht",
 
     // AdminTab
     userManagementLabel: "Nutzerverwaltung",
@@ -354,7 +359,7 @@ export const translations = {
     tipTdee: "Расчётный суточный расход энергии (обмен + активность). Основа всех расчётов дефицита.",
     tipPlannedDeficit: "Теоретический дефицит: TDEE − цель ккал. Чем больше, тем быстрее похудение.",
     tipAvgCalorieIntake: "Среднее потребление калорий за выбранный период (7 или 30 дней).",
-    tipAvgDiff: "Цель − Ø потребление. Положительное = ниже цели (хорошо!). Отрицательное = выше цели.",
+    tipAvgDiff: "Цель ккал − Ø потребление.\n\n+ (плюс) → ниже цели ✓\n− (минус) → выше цели\n0 → цель точно достигнута",
     tipAvgEnergyDeficit: "TDEE − Ø потребление. Фактический средний дефицит. Именно эта цифра определяет темп похудения.",
     tipRemainingWeight: "Текущий вес − целевой вес. Сколько кг ещё осталось до цели.",
     tipRemainingKcal: "Остаток кг × 7700 ккал. Суммарная энергия, которую нужно ещё сэкономить для достижения цели.",
@@ -364,6 +369,11 @@ export const translations = {
     tipSectionPlanned: "На основе твоей цели ккал и расчётного суточного расхода.",
     tipSectionActual: "На основе фактически записанных приёмов пищи за выбранный период.",
     tipSectionForecast: "На основе твоего текущего среднего дефицита энергии за выбранный период.",
+
+    // VerlaufTab — Abweichungs-Interpretation
+    underGoalText: "ниже цели",
+    overGoalText: "выше цели",
+    exactGoalText: "Цель достигнута",
 
     // AdminTab
     userManagementLabel: "Управление пользователями",
