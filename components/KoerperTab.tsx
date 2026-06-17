@@ -155,6 +155,16 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
 
   useEffect(() => { loadProfile(); loadWeightLog(); }, [loadProfile, loadWeightLog]);
 
+  /* ── Persist calculator preferences in localStorage ── */
+  useEffect(() => {
+    const w = localStorage.getItem(`kcal-calc-weeks-${userId}`);
+    if (w) setWeeks(parseInt(w));
+    const a = localStorage.getItem(`kcal-calc-activity-${userId}`) as ActivityKey | null;
+    if (a && ACTIVITY_OPTIONS.some((o) => o.key === a)) setActivity(a);
+  }, [userId]);
+  useEffect(() => { localStorage.setItem(`kcal-calc-weeks-${userId}`, String(weeks)); }, [weeks, userId]);
+  useEffect(() => { localStorage.setItem(`kcal-calc-activity-${userId}`, activity); }, [activity, userId]);
+
   /* ── Chart: filter by period ── */
   const chartEntries = useMemo(() => {
     const cutoff = new Date();
