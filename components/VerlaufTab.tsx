@@ -1,41 +1,82 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { TrendingDown, TrendingUp, Minus, Trash2, Activity, ChevronDown, Dumbbell } from "lucide-react";
+import { TrendingDown, TrendingUp, Minus, Trash2, Activity, ChevronDown, Dumbbell, Target } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/context/LanguageContext";
 
 interface DayEntry { date: string; total: number; count: number; }
 interface FoodItem { id: string; name: string; calories: number; protein: number; fat: number; entry_time: string; }
 interface SportItem { id: string; activity_name: string; amount: number; unit: string; }
-interface Props { userId: string; budget: number; }
+interface Props { userId: string; budget: number; deficit: number; }
 
-export default function VerlaufTab({ userId, budget }: Props) {
+type PrognosisResult =
+  | { state: "noData" }
+  | { state: "goalReached" }
+  | { state: "noTdee" }
+  | { state: "impossible" }
+  | { state: "ok"; remainingKg: string; remainingKcal: string; goalDateStr: string };
+
+function AnalysisRow({
+  label,
+  value,
+  valueClass = "text-slate-900 dark:text-white font-semibold",
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className={`text-sm tabular-nums ${valueClass}`}>{value}</span>
+    </div>
+  );
+}
+
+export default function VerlaufTab({ userId, budget, deficit }: Props) {
   const { lang, t } = useLanguage();
-  const [history, setHistory]       = useState<DayEntry[]>([]);
-  const [stepsMap, setStepsMap]     = useState<Record<string, number>>({});
-  const [foodByDate,   setFoodByDate]   = useState<Record<string, FoodItem[]>>({});
-  const [sportByDate,  setSportByDate]  = useState<Record<string, SportItem[]>>({});
+  const [history, setHistory]         = useState<DayEntry[]>([]);
+  const [stepsMap, setStepsMap]       = useState<Record<string, number>>({});
+  const [foodByDate, setFoodByDate]   = useState<Record<string, FoodItem[]>>({});
+  const [sportByDate, setSportByDate] = useState<Record<string, SportItem[]>>({});
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+  const [currentWeight, setCurrentWeight] = useState<number | null>(null);
+  const [goalWeight, setGoalWeight]   = useState<number | null>(null);
+  const [analysisPeriod, setAnalysisPeriod] = useState<7 | 30>(7);
+
+  const locale = lang === "ru" ? "ru-RU" : "de-DE";
+  const tdee = budget + deficit;
+  const hasTdeeData = deficit > 0;
 
   const load = useCallback(async () => {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const from = thirtyDaysAgo.toISOString().split("T")[0];
 
-    const [{ data: foodData }, { data: stepsData }, { data: sportData }] = await Promise.all([
-      supabase.from("food_entries")
+    const [
+      { data: foodData },
+      { data: stepsData },
+      { data: sportData },
+      { data: profileData },
+    ] = await Promise.all([
+      supabase
+        .from("food_entries")
         .select("id,entry_date,name,calories,protein,fat,entry_time")
         .eq("user_id", userId).gte("entry_date", from)
         .order("entry_date", { ascending: false })
         .order("created_at", { ascending: true }),
       supabase.from("daily_steps").select("logged_at,steps")
         .eq("user_id", userId).gte("logged_at", from),
-      supabase.from("sport_entries")
+      supabase
+        .from("sport_entries")
         .select("id,entry_date,activity_name,amount,unit")
         .eq("user_id", userId).gte("entry_date", from)
         .order("created_at", { ascending: true }),
+      supabase.from("body_profile")
+        .select("current_weight,goal_weight")
+        .eq("user_id", userId).maybeSingle(),
     ]);
 
     const grouped: Record<string, DayEntry> = {};
@@ -64,9 +105,16 @@ export default function VerlaufTab({ userId, budget }: Props) {
     const sd: Record<string, SportItem[]> = {};
     for (const row of sportData ?? []) {
       if (!sd[row.entry_date]) sd[row.entry_date] = [];
-      sd[row.entry_date].push({ id: row.id, activity_name: row.activity_name, amount: row.amount, unit: row.unit });
+      sd[row.entry_date].push({
+        id: row.id, activity_name: row.activity_name, amount: row.amount, unit: row.unit,
+      });
     }
     setSportByDate(sd);
+
+    if (profileData) {
+      setCurrentWeight(profileData.current_weight != null ? parseFloat(profileData.current_weight) : null);
+      setGoalWeight(profileData.goal_weight != null ? parseFloat(profileData.goal_weight) : null);
+    }
   }, [userId]);
 
   useEffect(() => { load(); }, [load]);
@@ -85,8 +133,8 @@ export default function VerlaufTab({ userId, budget }: Props) {
       .from("food_entries").delete().eq("user_id", userId).eq("entry_date", date);
     if (!error) {
       setHistory((prev) => prev.filter((d) => d.date !== date));
-      setFoodByDate((prev)  => { const next = { ...prev };  delete next[date]; return next; });
-      setSportByDate((prev) => { const next = { ...prev };  delete next[date]; return next; });
+      setFoodByDate((prev)  => { const next = { ...prev }; delete next[date]; return next; });
+      setSportByDate((prev) => { const next = { ...prev }; delete next[date]; return next; });
       setExpandedDays((prev) => { const next = new Set(prev); next.delete(date); return next; });
       toast.success(t.toastDayDeleted);
     }
@@ -101,18 +149,62 @@ export default function VerlaufTab({ userId, budget }: Props) {
     });
   }
 
-  const locale = lang === "ru" ? "ru-RU" : "de-DE";
-
   function fmtDate(d: string) {
     const today = new Date().toISOString().split("T")[0];
     if (d === today) return t.todayLabel;
     return new Date(d + "T00:00:00").toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
   }
 
-  const deficit     = history.reduce((s, d) => s + Math.max(0, budget - d.total), 0);
-  const daysUnder   = history.filter((d) => d.total <= budget).length;
+  // Summary stats (all tracked days)
+  const daysUnder = history.filter((d) => d.total <= budget).length;
   const stepsValues = Object.values(stepsMap).filter((v) => v > 0);
-  const avgStepsVal = stepsValues.length > 0 ? Math.round(stepsValues.reduce((s, v) => s + v, 0) / stepsValues.length) : 0;
+  const avgStepsVal = stepsValues.length > 0
+    ? Math.round(stepsValues.reduce((s, v) => s + v, 0) / stepsValues.length)
+    : 0;
+  const avgDiffAll = history.length > 0
+    ? Math.round(history.reduce((s, d) => s + (budget - d.total), 0) / history.length)
+    : 0;
+
+  // Zielanalyse: data for selected period
+  const analysisData = useMemo(() => {
+    if (history.length === 0) return null;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - analysisPeriod);
+    const cutoffStr = cutoff.toISOString().split("T")[0];
+    const days = history.filter((d) => d.date >= cutoffStr);
+    const n = days.length;
+    if (n === 0) return null;
+
+    const avgCal = Math.round(days.reduce((s, d) => s + d.total, 0) / n);
+    const avgDiff = Math.round(days.reduce((s, d) => s + (budget - d.total), 0) / n);
+    const avgRealDeficit = hasTdeeData
+      ? Math.round(days.reduce((s, d) => s + (tdee - d.total), 0) / n)
+      : null;
+
+    return { n, avgCal, avgDiff, avgRealDeficit };
+  }, [history, budget, tdee, hasTdeeData, analysisPeriod]);
+
+  // Prognosis
+  const prognosis = useMemo((): PrognosisResult => {
+    if (currentWeight == null || goalWeight == null) return { state: "noData" };
+    const remaining = currentWeight - goalWeight;
+    if (remaining <= 0) return { state: "goalReached" };
+    if (!hasTdeeData) return { state: "noTdee" };
+    const avgRD = analysisData?.avgRealDeficit;
+    if (avgRD == null || avgRD <= 0) return { state: "impossible" };
+
+    const remainingKcal = Math.round(remaining * 7700);
+    const daysToGoal = Math.round(remainingKcal / avgRD);
+    const goalDate = new Date();
+    goalDate.setDate(goalDate.getDate() + daysToGoal);
+
+    return {
+      state: "ok",
+      remainingKg: remaining.toFixed(1),
+      remainingKcal: remainingKcal.toLocaleString(locale),
+      goalDateStr: goalDate.toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" }),
+    };
+  }, [currentWeight, goalWeight, hasTdeeData, analysisData, locale]);
 
   const card = "gc rounded-2xl";
 
@@ -123,20 +215,168 @@ export default function VerlaufTab({ userId, budget }: Props) {
       {history.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
-            { label: t.daysTracked, value: history.length, icon: <Minus size={14} className="text-slate-500" />, color: "text-slate-900 dark:text-white" },
-            { label: t.inGoal, value: daysUnder, icon: <TrendingDown size={14} className="text-emerald-500 dark:text-emerald-400" />, color: "text-emerald-600 dark:text-emerald-300" },
-            { label: t.avgDeficit, value: `${Math.round(deficit / history.length)}`, sub: "kcal", icon: <TrendingDown size={14} className="text-blue-500 dark:text-blue-400" />, color: "text-blue-600 dark:text-blue-300" },
-            { label: t.avgSteps, value: avgStepsVal > 0 ? avgStepsVal.toLocaleString(locale) : "—", icon: <Activity size={14} className="text-teal-500 dark:text-teal-400" />, color: "text-teal-600 dark:text-teal-300" },
+            {
+              label: t.daysTracked,
+              value: history.length,
+              icon: <Minus size={14} className="text-slate-500" />,
+              color: "text-slate-900 dark:text-white",
+            },
+            {
+              label: t.inGoal,
+              value: daysUnder,
+              icon: <TrendingDown size={14} className="text-emerald-500 dark:text-emerald-400" />,
+              color: "text-emerald-600 dark:text-emerald-300",
+            },
+            {
+              label: t.avgDiffToTarget,
+              value: `${avgDiffAll >= 0 ? "+" : ""}${avgDiffAll}`,
+              sub: "kcal",
+              icon: avgDiffAll >= 0
+                ? <TrendingDown size={14} className="text-blue-500 dark:text-blue-400" />
+                : <TrendingUp size={14} className="text-red-500 dark:text-red-400" />,
+              color: avgDiffAll >= 0 ? "text-blue-600 dark:text-blue-300" : "text-red-500 dark:text-red-400",
+            },
+            {
+              label: t.avgSteps,
+              value: avgStepsVal > 0 ? avgStepsVal.toLocaleString(locale) : "—",
+              icon: <Activity size={14} className="text-teal-500 dark:text-teal-400" />,
+              color: "text-teal-600 dark:text-teal-300",
+            },
           ].map((s) => (
             <div key={s.label} className={`${card} p-4 text-center`}>
               <div className="flex items-center justify-center mb-2">{s.icon}</div>
               <p className={`text-xl font-bold tabular-nums ${s.color}`}>
                 {s.value}
-                {"sub" in s && s.sub && <span className="text-xs font-normal text-slate-500 ml-0.5">{s.sub}</span>}
+                {"sub" in s && <span className="text-xs font-normal text-slate-500 ml-0.5">{s.sub}</span>}
               </p>
               <p className="text-xs text-slate-500 mt-0.5 leading-tight">{s.label}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Zielanalyse */}
+      {history.length > 0 && (
+        <div className={`${card} p-5`}>
+          <div className="flex items-center gap-2 mb-5">
+            <div className="w-8 h-8 bg-violet-500/15 rounded-xl flex items-center justify-center">
+              <Target size={16} className="text-violet-500 dark:text-violet-400" />
+            </div>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{t.goalAnalysisTitle}</p>
+          </div>
+
+          {/* GEPLANT */}
+          <div className="mb-5">
+            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
+              {t.plannedSection}
+            </p>
+            <AnalysisRow label={t.calorieTargetLabel} value={`${budget} kcal`} />
+            {hasTdeeData && (
+              <>
+                <AnalysisRow label={t.tdeeLabel} value={`${tdee} kcal`} />
+                <AnalysisRow
+                  label={t.plannedDeficitLabel}
+                  value={`${tdee - budget} kcal/Tag`}
+                  valueClass="text-violet-600 dark:text-violet-400 font-semibold"
+                />
+              </>
+            )}
+          </div>
+
+          <div className="h-px bg-black/[0.05] dark:bg-white/[0.06] mb-5" />
+
+          {/* TATSÄCHLICH */}
+          <div className="mb-5">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                {t.actualSection}
+              </p>
+              <div className="flex gap-1 bg-black/[0.05] dark:bg-white/[0.06] rounded-xl p-0.5">
+                {([7, 30] as const).map((d) => (
+                  <button
+                    key={d}
+                    onClick={() => setAnalysisPeriod(d)}
+                    className={`px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all ${
+                      analysisPeriod === d
+                        ? "text-white shadow-sm"
+                        : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                    }`}
+                    style={analysisPeriod === d ? { background: "linear-gradient(135deg, #3b82f6, #6366f1)" } : {}}
+                  >
+                    {d === 7 ? t.period7d : t.period30d}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {analysisData ? (
+              <>
+                <AnalysisRow label={t.avgCalorieIntake} value={`${analysisData.avgCal} kcal`} />
+                <AnalysisRow
+                  label={t.avgDiffToTarget}
+                  value={`${analysisData.avgDiff >= 0 ? "+" : ""}${analysisData.avgDiff} kcal`}
+                  valueClass={
+                    analysisData.avgDiff >= 0
+                      ? "text-emerald-600 dark:text-emerald-400 font-semibold"
+                      : "text-red-500 dark:text-red-400 font-semibold"
+                  }
+                />
+                {analysisData.avgRealDeficit !== null && (
+                  <AnalysisRow
+                    label={t.avgEnergyDeficit}
+                    value={`${analysisData.avgRealDeficit} kcal`}
+                    valueClass={
+                      analysisData.avgRealDeficit > 0
+                        ? "text-blue-600 dark:text-blue-400 font-semibold"
+                        : "text-red-500 dark:text-red-400 font-semibold"
+                    }
+                  />
+                )}
+              </>
+            ) : (
+              <p className="text-xs text-slate-400">{t.noHistory}</p>
+            )}
+          </div>
+
+          {/* PROGNOSE — only shown when TDEE is known */}
+          {hasTdeeData && (
+            <>
+              <div className="h-px bg-black/[0.05] dark:bg-white/[0.06] mb-5" />
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">
+                  {t.forecastSection}
+                </p>
+                {prognosis.state === "noData" && (
+                  <p className="text-xs text-slate-400">{t.noBodyDataForForecast}</p>
+                )}
+                {prognosis.state === "goalReached" && (
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">🎉 {t.goalReached}</p>
+                )}
+                {prognosis.state === "noTdee" && (
+                  <p className="text-xs text-slate-400">{t.noBodyDataForForecast}</p>
+                )}
+                {prognosis.state === "impossible" && (
+                  <p className="text-xs text-red-500 dark:text-red-400">{t.noForecastPossible}</p>
+                )}
+                {prognosis.state === "ok" && (
+                  <>
+                    <AnalysisRow
+                      label={t.remainingWeightLabel}
+                      value={`${prognosis.remainingKg} kg`}
+                    />
+                    <AnalysisRow
+                      label={t.remainingKcalLabel}
+                      value={`${prognosis.remainingKcal} kcal`}
+                    />
+                    <AnalysisRow
+                      label={t.estimatedGoalDateLabel}
+                      value={prognosis.goalDateStr}
+                      valueClass="text-blue-600 dark:text-blue-400 font-semibold"
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -154,16 +394,16 @@ export default function VerlaufTab({ userId, budget }: Props) {
         ) : (
           <div className="space-y-2">
             {history.map((day) => {
-              const steps           = stepsMap[day.date] ?? 0;
-              const burned          = Math.round(steps * 0.04);
-              const effectiveBudget = budget + burned;
-              const pct             = Math.min((day.total / effectiveBudget) * 100, 100);
-              const over            = day.total > effectiveBudget;
-              const isToday         = day.date === new Date().toISOString().split("T")[0];
-              const diff            = effectiveBudget - day.total;
-              const expanded        = expandedDays.has(day.date);
-              const items           = foodByDate[day.date]  ?? [];
-              const sportItems      = sportByDate[day.date] ?? [];
+              const steps        = stepsMap[day.date] ?? 0;
+              const burned       = Math.round(steps * 0.04);
+              const diffToTarget = budget - day.total;
+              const over         = day.total > budget;
+              const pct          = Math.min((day.total / budget) * 100, 100);
+              const isToday      = day.date === new Date().toISOString().split("T")[0];
+              const expanded     = expandedDays.has(day.date);
+              const items        = foodByDate[day.date]  ?? [];
+              const sportItems   = sportByDate[day.date] ?? [];
+              const realDeficit  = hasTdeeData ? tdee - day.total : null;
 
               return (
                 <div key={day.date} className="border border-black/[0.06] dark:border-white/[0.07] rounded-xl overflow-hidden">
@@ -173,7 +413,6 @@ export default function VerlaufTab({ userId, budget }: Props) {
                     className="w-full px-3 sm:px-4 pt-3 pb-2.5 flex flex-col gap-1.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors text-left"
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
-                      {/* Left: chevron + date */}
                       <ChevronDown
                         size={13}
                         className={`text-slate-400 transition-transform duration-200 shrink-0 ${expanded ? "rotate-180" : ""}`}
@@ -181,7 +420,6 @@ export default function VerlaufTab({ userId, budget }: Props) {
                       <span className={`text-sm truncate min-w-0 flex-1 ${isToday ? "font-bold text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-300 font-medium"}`}>
                         {fmtDate(day.date)}
                       </span>
-                      {/* Right: diff + calories + delete — shrink-0 so they never wrap */}
                       <div className="flex items-center gap-1.5 shrink-0 ml-auto">
                         {steps > 0 && (
                           <span className="hidden sm:flex text-xs text-teal-600 dark:text-teal-400 font-medium items-center gap-0.5">
@@ -190,12 +428,12 @@ export default function VerlaufTab({ userId, budget }: Props) {
                         )}
                         {!over && (
                           <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-0.5">
-                            <TrendingDown size={11} /> {Math.abs(diff)}
+                            <TrendingDown size={11} /> {Math.abs(diffToTarget)}
                           </span>
                         )}
                         {over && (
                           <span className="text-xs text-red-500 dark:text-red-400 font-medium flex items-center gap-0.5">
-                            <TrendingUp size={11} /> +{Math.abs(diff)}
+                            <TrendingUp size={11} /> +{Math.abs(diffToTarget)}
                           </span>
                         )}
                         <span className={`text-sm font-semibold tabular-nums ${over ? "text-red-500 dark:text-red-400" : "text-slate-900 dark:text-white"}`}>
@@ -211,7 +449,7 @@ export default function VerlaufTab({ userId, budget }: Props) {
                       </div>
                     </div>
 
-                    {/* Progress bar */}
+                    {/* Progress bar against fixed calorie target */}
                     <div className="w-full bg-black/[0.07] dark:bg-white/[0.07] rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-1.5 rounded-full transition-all duration-300 ${
@@ -227,6 +465,24 @@ export default function VerlaufTab({ userId, budget }: Props) {
                   {/* Expandable entries */}
                   {expanded && (items.length > 0 || sportItems.length > 0 || steps > 0) && (
                     <div className="border-t border-black/[0.06] dark:border-white/[0.07] divide-y divide-black/[0.04] dark:divide-white/[0.04]">
+
+                      {/* Day summary row */}
+                      <div className="px-4 py-2 flex items-center gap-3 flex-wrap bg-slate-50/50 dark:bg-white/[0.02]">
+                        <span className="text-xs text-slate-500">
+                          {t.calorieTargetLabel}:{" "}
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">{budget} kcal</span>
+                        </span>
+                        <span className={`text-xs font-semibold ${diffToTarget >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
+                          {t.differenceToTargetLabel}: {diffToTarget >= 0 ? "+" : ""}{diffToTarget} kcal
+                        </span>
+                        {realDeficit !== null && (
+                          <span className={`text-xs font-semibold ${realDeficit > 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-500 dark:text-orange-400"}`}>
+                            {t.realDeficitLabel}: {realDeficit} kcal
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Food items */}
                       {items.map((item) => (
                         <div key={item.id} className="px-4 py-2.5 flex items-center justify-between">
                           <div className="min-w-0 flex-1">
@@ -243,7 +499,8 @@ export default function VerlaufTab({ userId, budget }: Props) {
                           </span>
                         </div>
                       ))}
-                      {/* Steps row — only shown on mobile (hidden in header via sm:flex) */}
+
+                      {/* Steps row — mobile only (header shows it on lg) */}
                       {steps > 0 && (
                         <div className="sm:hidden px-4 py-2 flex items-center gap-2 bg-teal-500/[0.04]">
                           <Activity size={12} className="text-teal-500 shrink-0" />
@@ -252,6 +509,8 @@ export default function VerlaufTab({ userId, budget }: Props) {
                           </span>
                         </div>
                       )}
+
+                      {/* Sport items */}
                       {sportItems.length > 0 && (
                         <>
                           {items.length > 0 && (

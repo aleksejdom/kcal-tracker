@@ -268,7 +268,7 @@ export default function Dashboard({ session }: Props) {
               />
             )}
             {tab === "produkte" && <ProdukteTab userId={userId} isAdmin={isAdmin} />}
-            {tab === "verlauf"  && <VerlaufTab  userId={userId} budget={settings.budget} />}
+            {tab === "verlauf"  && <VerlaufTab  userId={userId} budget={settings.budget} deficit={settings.deficit} />}
             {tab === "sport"    && <SportTab    userId={userId} />}
             {tab === "admin" && isAdmin && <AdminTab currentUserId={userId} />}
           </main>
