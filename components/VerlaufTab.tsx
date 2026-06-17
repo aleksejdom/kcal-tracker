@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { TrendingDown, TrendingUp, Minus, Trash2, Activity, ChevronDown, Dumbbell, Target } from "lucide-react";
+import { TrendingDown, TrendingUp, Minus, Trash2, Activity, ChevronDown, Dumbbell, Target, Info } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -18,32 +18,100 @@ type PrognosisResult =
   | { state: "impossible" }
   | { state: "ok"; remainingKg: string; remainingKcal: string; goalDateStr: string };
 
-function AnalysisRow({
-  label,
-  value,
-  valueClass = "text-slate-900 dark:text-white font-semibold",
-}: {
-  label: string;
-  value: string;
-  valueClass?: string;
-}) {
+/* ─── Info Tooltip ─────────────────────────────────────── */
+function InfoTooltip({ text }: { text: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    document.addEventListener("touchstart", close);
+    return () => {
+      document.removeEventListener("mousedown", close);
+      document.removeEventListener("touchstart", close);
+    };
+  }, [open]);
+
   return (
-    <div className="flex items-center justify-between py-1.5">
-      <span className="text-sm text-slate-500">{label}</span>
-      <span className={`text-sm tabular-nums ${valueClass}`}>{value}</span>
+    <div
+      ref={ref}
+      className="relative inline-flex shrink-0"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
+        className="text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors ml-1 leading-none"
+        aria-label="Erklärung"
+      >
+        <Info size={12} />
+      </button>
+      {open && (
+        <div className="absolute z-50 bottom-full left-0 mb-2 w-64 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-black/[0.06] dark:border-white/[0.10] p-3">
+          <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">{text}</p>
+          {/* Arrow */}
+          <div className="absolute top-full left-3">
+            <svg width="12" height="6" viewBox="0 0 12 6" className="overflow-visible">
+              <path d="M0 0 L6 6 L12 0Z" className="fill-white dark:fill-slate-800" />
+              <path d="M0 0 L6 6 L12 0" fill="none" stroke="black" strokeOpacity="0.06" strokeWidth="1" />
+            </svg>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
+/* ─── Analysis Row ──────────────────────────────────────── */
+function AnalysisRow({
+  label,
+  value,
+  valueClass = "text-slate-900 dark:text-white font-semibold",
+  tooltip,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+  tooltip?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <div className="flex items-center min-w-0">
+        <span className="text-sm text-slate-500 leading-snug">{label}</span>
+        {tooltip && <InfoTooltip text={tooltip} />}
+      </div>
+      <span className={`text-sm tabular-nums ml-3 shrink-0 ${valueClass}`}>{value}</span>
+    </div>
+  );
+}
+
+/* ─── Section Header ────────────────────────────────────── */
+function SectionHeading({ title, sub }: { title: string; sub: string }) {
+  return (
+    <div className="mb-3">
+      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+        {title}
+      </p>
+      <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5 leading-snug">{sub}</p>
+    </div>
+  );
+}
+
+/* ─── Main Component ────────────────────────────────────── */
 export default function VerlaufTab({ userId, budget, deficit }: Props) {
   const { lang, t } = useLanguage();
-  const [history, setHistory]         = useState<DayEntry[]>([]);
-  const [stepsMap, setStepsMap]       = useState<Record<string, number>>({});
-  const [foodByDate, setFoodByDate]   = useState<Record<string, FoodItem[]>>({});
-  const [sportByDate, setSportByDate] = useState<Record<string, SportItem[]>>({});
+  const [history, setHistory]           = useState<DayEntry[]>([]);
+  const [stepsMap, setStepsMap]         = useState<Record<string, number>>({});
+  const [foodByDate, setFoodByDate]     = useState<Record<string, FoodItem[]>>({});
+  const [sportByDate, setSportByDate]   = useState<Record<string, SportItem[]>>({});
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [currentWeight, setCurrentWeight] = useState<number | null>(null);
-  const [goalWeight, setGoalWeight]   = useState<number | null>(null);
+  const [goalWeight, setGoalWeight]     = useState<number | null>(null);
   const [analysisPeriod, setAnalysisPeriod] = useState<7 | 30>(7);
 
   const locale = lang === "ru" ? "ru-RU" : "de-DE";
@@ -81,7 +149,6 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
 
     const grouped: Record<string, DayEntry> = {};
     const byDate: Record<string, FoodItem[]> = {};
-
     for (const row of foodData ?? []) {
       if (!grouped[row.entry_date]) {
         grouped[row.entry_date] = { date: row.entry_date, total: 0, count: 0 };
@@ -94,7 +161,6 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
         protein: row.protein, fat: row.fat, entry_time: row.entry_time,
       });
     }
-
     setHistory(Object.values(grouped).sort((a, b) => b.date.localeCompare(a.date)));
     setFoodByDate(byDate);
 
@@ -122,8 +188,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   function toggleDay(date: string) {
     setExpandedDays((prev) => {
       const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
+      if (next.has(date)) next.delete(date); else next.add(date);
       return next;
     });
   }
@@ -155,15 +220,13 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     return new Date(d + "T00:00:00").toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
   }
 
-  // Summary stats (all tracked days)
+  // Summary stats (all 30 tracked days)
   const daysUnder = history.filter((d) => d.total <= budget).length;
   const stepsValues = Object.values(stepsMap).filter((v) => v > 0);
   const avgStepsVal = stepsValues.length > 0
-    ? Math.round(stepsValues.reduce((s, v) => s + v, 0) / stepsValues.length)
-    : 0;
+    ? Math.round(stepsValues.reduce((s, v) => s + v, 0) / stepsValues.length) : 0;
   const avgDiffAll = history.length > 0
-    ? Math.round(history.reduce((s, d) => s + (budget - d.total), 0) / history.length)
-    : 0;
+    ? Math.round(history.reduce((s, d) => s + (budget - d.total), 0) / history.length) : 0;
 
   // Zielanalyse: data for selected period
   const analysisData = useMemo(() => {
@@ -211,7 +274,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   return (
     <div className="space-y-4">
 
-      {/* Summary strip */}
+      {/* ── Summary strip ── */}
       {history.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
@@ -255,7 +318,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
         </div>
       )}
 
-      {/* Zielanalyse */}
+      {/* ── Zielanalyse ── */}
       {history.length > 0 && (
         <div className={`${card} p-5`}>
           <div className="flex items-center gap-2 mb-5">
@@ -267,17 +330,24 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
 
           {/* GEPLANT */}
           <div className="mb-5">
-            <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-2">
-              {t.plannedSection}
-            </p>
-            <AnalysisRow label={t.calorieTargetLabel} value={`${budget} kcal`} />
+            <SectionHeading title={t.plannedSection} sub={t.tipSectionPlanned} />
+            <AnalysisRow
+              label={t.calorieTargetLabel}
+              value={`${budget} kcal`}
+              tooltip={t.tipCalorieTarget}
+            />
             {hasTdeeData && (
               <>
-                <AnalysisRow label={t.tdeeLabel} value={`${tdee} kcal`} />
+                <AnalysisRow
+                  label={t.tdeeLabel}
+                  value={`${tdee} kcal`}
+                  tooltip={t.tipTdee}
+                />
                 <AnalysisRow
                   label={t.plannedDeficitLabel}
                   value={`${tdee - budget} kcal/Tag`}
                   valueClass="text-violet-600 dark:text-violet-400 font-semibold"
+                  tooltip={t.tipPlannedDeficit}
                 />
               </>
             )}
@@ -287,11 +357,16 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
 
           {/* TATSÄCHLICH */}
           <div className="mb-5">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
-                {t.actualSection}
-              </p>
-              <div className="flex gap-1 bg-black/[0.05] dark:bg-white/[0.06] rounded-xl p-0.5">
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+                  {t.actualSection}
+                </p>
+                <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5 leading-snug">
+                  {t.tipSectionActual}
+                </p>
+              </div>
+              <div className="flex gap-1 bg-black/[0.05] dark:bg-white/[0.06] rounded-xl p-0.5 shrink-0">
                 {([7, 30] as const).map((d) => (
                   <button
                     key={d}
@@ -310,25 +385,27 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
             </div>
             {analysisData ? (
               <>
-                <AnalysisRow label={t.avgCalorieIntake} value={`${analysisData.avgCal} kcal`} />
+                <AnalysisRow
+                  label={t.avgCalorieIntake}
+                  value={`${analysisData.avgCal} kcal`}
+                  tooltip={t.tipAvgCalorieIntake}
+                />
                 <AnalysisRow
                   label={t.avgDiffToTarget}
                   value={`${analysisData.avgDiff >= 0 ? "+" : ""}${analysisData.avgDiff} kcal`}
-                  valueClass={
-                    analysisData.avgDiff >= 0
-                      ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                      : "text-red-500 dark:text-red-400 font-semibold"
-                  }
+                  valueClass={analysisData.avgDiff >= 0
+                    ? "text-emerald-600 dark:text-emerald-400 font-semibold"
+                    : "text-red-500 dark:text-red-400 font-semibold"}
+                  tooltip={t.tipAvgDiff}
                 />
                 {analysisData.avgRealDeficit !== null && (
                   <AnalysisRow
                     label={t.avgEnergyDeficit}
                     value={`${analysisData.avgRealDeficit} kcal`}
-                    valueClass={
-                      analysisData.avgRealDeficit > 0
-                        ? "text-blue-600 dark:text-blue-400 font-semibold"
-                        : "text-red-500 dark:text-red-400 font-semibold"
-                    }
+                    valueClass={analysisData.avgRealDeficit > 0
+                      ? "text-blue-600 dark:text-blue-400 font-semibold"
+                      : "text-red-500 dark:text-red-400 font-semibold"}
+                    tooltip={t.tipAvgEnergyDeficit}
                   />
                 )}
               </>
@@ -337,14 +414,12 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
             )}
           </div>
 
-          {/* PROGNOSE — only shown when TDEE is known */}
+          {/* PROGNOSE */}
           {hasTdeeData && (
             <>
               <div className="h-px bg-black/[0.05] dark:bg-white/[0.06] mb-5" />
               <div>
-                <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-3">
-                  {t.forecastSection}
-                </p>
+                <SectionHeading title={t.forecastSection} sub={t.tipSectionForecast} />
                 {prognosis.state === "noData" && (
                   <p className="text-xs text-slate-400">{t.noBodyDataForForecast}</p>
                 )}
@@ -362,15 +437,18 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                     <AnalysisRow
                       label={t.remainingWeightLabel}
                       value={`${prognosis.remainingKg} kg`}
+                      tooltip={t.tipRemainingWeight}
                     />
                     <AnalysisRow
                       label={t.remainingKcalLabel}
                       value={`${prognosis.remainingKcal} kcal`}
+                      tooltip={t.tipRemainingKcal}
                     />
                     <AnalysisRow
                       label={t.estimatedGoalDateLabel}
                       value={prognosis.goalDateStr}
                       valueClass="text-blue-600 dark:text-blue-400 font-semibold"
+                      tooltip={t.tipGoalDate}
                     />
                   </>
                 )}
@@ -380,7 +458,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
         </div>
       )}
 
-      {/* History list */}
+      {/* ── History list ── */}
       <div className={`${card} p-5`}>
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-5">
           {t.historyTitle}
@@ -407,7 +485,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
 
               return (
                 <div key={day.date} className="border border-black/[0.06] dark:border-white/[0.07] rounded-xl overflow-hidden">
-                  {/* Day header — clickable */}
+                  {/* Day header */}
                   <button
                     onClick={() => toggleDay(day.date)}
                     className="w-full px-3 sm:px-4 pt-3 pb-2.5 flex flex-col gap-1.5 hover:bg-black/[0.02] dark:hover:bg-white/[0.03] transition-colors text-left"
@@ -453,9 +531,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                     <div className="w-full bg-black/[0.07] dark:bg-white/[0.07] rounded-full h-1.5 overflow-hidden">
                       <div
                         className={`h-1.5 rounded-full transition-all duration-300 ${
-                          over
-                            ? "bg-gradient-to-r from-red-400 to-rose-500"
-                            : "bg-gradient-to-r from-blue-400 to-violet-500"
+                          over ? "bg-gradient-to-r from-red-400 to-rose-500" : "bg-gradient-to-r from-blue-400 to-violet-500"
                         }`}
                         style={{ width: `${pct}%` }}
                       />
@@ -500,7 +576,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                         </div>
                       ))}
 
-                      {/* Steps row — mobile only (header shows it on lg) */}
+                      {/* Steps — mobile only */}
                       {steps > 0 && (
                         <div className="sm:hidden px-4 py-2 flex items-center gap-2 bg-teal-500/[0.04]">
                           <Activity size={12} className="text-teal-500 shrink-0" />

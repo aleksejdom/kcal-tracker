@@ -90,10 +90,26 @@ export const translations = {
     differenceToTargetLabel: "Differenz zum Ziel",
     realDeficitLabel: "Energiedefizit",
     remainingWeightLabel: "Restgewicht",
-    remainingKcalLabel: "Verbleibende kcal",
+    remainingKcalLabel: "Verbleibendes Defizit",
     estimatedGoalDateLabel: "Zieldatum",
     noForecastPossible: "Kein Zieldatum berechenbar – aktueller Trend reicht nicht aus",
     noBodyDataForForecast: "Körperdaten fehlen – im Körper-Tab ergänzen",
+
+    // VerlaufTab — Tooltip texts
+    tipCalorieTarget: "Max. Kalorien pro Tag für dein Abnehmtempo – berechnet aus TDEE minus geplantem Defizit.",
+    tipTdee: "Geschätzter Tagesverbrauch deines Körpers (Grundumsatz + Alltag + Aktivität). Basis für alle Defizit-Berechnungen.",
+    tipPlannedDeficit: "Theoretisches Defizit: TDEE − Kalorienziel. Je größer, desto schneller nimmst du ab – aber nicht zu hoch!",
+    tipAvgCalorieIntake: "Durchschnittliche Kalorienaufnahme im gewählten Zeitraum (7 oder 30 Tage).",
+    tipAvgDiff: "Kalorienziel − Ø Aufnahme. Positiv = du liegst unter deinem Ziel (gut!). Negativ = du liegst über deinem Ziel.",
+    tipAvgEnergyDeficit: "TDEE − Ø Aufnahme. Dein tatsächliches mittleres Energiedefizit. Diese Zahl bestimmt dein Abnehmtempo.",
+    tipRemainingWeight: "Aktuelles Gewicht − Zielgewicht. Wie viele kg bis zum Zielgewicht noch fehlen.",
+    tipRemainingKcal: "Restgewicht × 7700 kcal. Die gesamte Energie, die noch eingespart werden muss, um dein Zielgewicht zu erreichen.",
+    tipGoalDate: "Verbleibendes Defizit ÷ Ø Energiedefizit. Prognose basierend auf deinem aktuellen Durchschnitt – aktualisiert sich mit deinen Einträgen.",
+
+    // VerlaufTab — Section helper texts
+    tipSectionPlanned: "Basierend auf deinem Kalorienziel und deinem geschätzten Tagesverbrauch.",
+    tipSectionActual: "Basierend auf deinen tatsächlich erfassten Mahlzeiten im gewählten Zeitraum.",
+    tipSectionForecast: "Basierend auf deinem aktuellen durchschnittlichen Energiedefizit im gewählten Zeitraum.",
 
     // AdminTab
     userManagementLabel: "Nutzerverwaltung",
@@ -328,10 +344,26 @@ export const translations = {
     differenceToTargetLabel: "Отклонение от цели",
     realDeficitLabel: "Дефицит энергии",
     remainingWeightLabel: "Остаток веса",
-    remainingKcalLabel: "Оставшиеся ккал",
+    remainingKcalLabel: "Дефицит до цели",
     estimatedGoalDateLabel: "Дата цели",
     noForecastPossible: "Дата недоступна – дефицит слишком мал",
     noBodyDataForForecast: "Данные тела отсутствуют – заполни вкладку «Тело»",
+
+    // VerlaufTab — Tooltip texts
+    tipCalorieTarget: "Макс. калорий в день для нужного темпа похудения – TDEE минус запланированный дефицит.",
+    tipTdee: "Расчётный суточный расход энергии (обмен + активность). Основа всех расчётов дефицита.",
+    tipPlannedDeficit: "Теоретический дефицит: TDEE − цель ккал. Чем больше, тем быстрее похудение.",
+    tipAvgCalorieIntake: "Среднее потребление калорий за выбранный период (7 или 30 дней).",
+    tipAvgDiff: "Цель − Ø потребление. Положительное = ниже цели (хорошо!). Отрицательное = выше цели.",
+    tipAvgEnergyDeficit: "TDEE − Ø потребление. Фактический средний дефицит. Именно эта цифра определяет темп похудения.",
+    tipRemainingWeight: "Текущий вес − целевой вес. Сколько кг ещё осталось до цели.",
+    tipRemainingKcal: "Остаток кг × 7700 ккал. Суммарная энергия, которую нужно ещё сэкономить для достижения цели.",
+    tipGoalDate: "Остаток дефицита ÷ Ø дефицит энергии. Прогноз по текущему среднему – обновляется автоматически.",
+
+    // VerlaufTab — Section helper texts
+    tipSectionPlanned: "На основе твоей цели ккал и расчётного суточного расхода.",
+    tipSectionActual: "На основе фактически записанных приёмов пищи за выбранный период.",
+    tipSectionForecast: "На основе твоего текущего среднего дефицита энергии за выбранный период.",
 
     // AdminTab
     userManagementLabel: "Управление пользователями",
