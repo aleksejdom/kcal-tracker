@@ -226,12 +226,12 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   const avgStepsVal = stepsValues.length > 0
     ? Math.round(stepsValues.reduce((s, v) => s + v, 0) / stepsValues.length) : 0;
   const avgDiffAll = history.length > 0
-    ? Math.round(history.reduce((s, d) => s + (budget - d.total), 0) / history.length) : 0;
-  const diffDesc = avgDiffAll > 0 ? t.underGoalText : avgDiffAll < 0 ? t.overGoalText : t.exactGoalText;
+    ? Math.round(history.reduce((s, d) => s + (d.total - budget), 0) / history.length) : 0;
+  const diffDesc = avgDiffAll > 0 ? t.overGoalText : avgDiffAll < 0 ? t.underGoalText : t.exactGoalText;
   const diffDescColor = avgDiffAll > 0
-    ? "text-emerald-600 dark:text-emerald-400"
+    ? "text-red-500 dark:text-red-400"
     : avgDiffAll < 0
-      ? "text-red-500 dark:text-red-400"
+      ? "text-emerald-600 dark:text-emerald-400"
       : "text-slate-400";
 
   // Zielanalyse: data for selected period
@@ -245,7 +245,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     if (n === 0) return null;
 
     const avgCal = Math.round(days.reduce((s, d) => s + d.total, 0) / n);
-    const avgDiff = Math.round(days.reduce((s, d) => s + (budget - d.total), 0) / n);
+    const avgDiff = Math.round(days.reduce((s, d) => s + (d.total - budget), 0) / n);
     const avgRealDeficit = hasTdeeData
       ? Math.round(days.reduce((s, d) => s + (tdee - d.total), 0) / n)
       : null;
@@ -303,10 +303,10 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
               description: diffDesc,
               descColor: diffDescColor,
               tooltip: t.tipAvgDiff,
-              icon: avgDiffAll >= 0
-                ? <TrendingDown size={14} className="text-blue-500 dark:text-blue-400" />
-                : <TrendingUp size={14} className="text-red-500 dark:text-red-400" />,
-              color: avgDiffAll >= 0 ? "text-blue-600 dark:text-blue-300" : "text-red-500 dark:text-red-400",
+              icon: avgDiffAll > 0
+                ? <TrendingUp size={14} className="text-red-500 dark:text-red-400" />
+                : <TrendingDown size={14} className="text-blue-500 dark:text-blue-400" />,
+              color: avgDiffAll > 0 ? "text-red-500 dark:text-red-400" : "text-blue-600 dark:text-blue-300",
             },
             {
               label: t.avgSteps,
@@ -410,9 +410,9 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                 <AnalysisRow
                   label={t.avgDiffToTarget}
                   value={`${analysisData.avgDiff >= 0 ? "+" : ""}${analysisData.avgDiff} kcal`}
-                  valueClass={analysisData.avgDiff >= 0
-                    ? "text-emerald-600 dark:text-emerald-400 font-semibold"
-                    : "text-red-500 dark:text-red-400 font-semibold"}
+                  valueClass={analysisData.avgDiff > 0
+                    ? "text-red-500 dark:text-red-400 font-semibold"
+                    : "text-emerald-600 dark:text-emerald-400 font-semibold"}
                   tooltip={t.tipAvgDiff}
                 />
                 {analysisData.avgRealDeficit !== null && (
@@ -491,7 +491,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
             {history.map((day) => {
               const steps        = stepsMap[day.date] ?? 0;
               const burned       = Math.round(steps * 0.04);
-              const diffToTarget = budget - day.total;
+              const diffToTarget = day.total - budget;
               const over         = day.total > budget;
               const pct          = Math.min((day.total / budget) * 100, 100);
               const isToday      = day.date === new Date().toISOString().split("T")[0];
@@ -565,8 +565,8 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                           {t.calorieTargetLabel}:{" "}
                           <span className="font-semibold text-slate-700 dark:text-slate-300">{budget} kcal</span>
                         </span>
-                        <span className={`text-xs font-semibold ${diffToTarget >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500 dark:text-red-400"}`}>
-                          {t.differenceToTargetLabel}: {diffToTarget >= 0 ? "+" : ""}{diffToTarget} kcal
+                        <span className={`text-xs font-semibold ${diffToTarget > 0 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+                          {t.differenceToTargetLabel}: {diffToTarget > 0 ? "+" : ""}{diffToTarget} kcal
                         </span>
                         {realDeficit !== null && (
                           <span className={`text-xs font-semibold ${realDeficit > 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-500 dark:text-orange-400"}`}>
