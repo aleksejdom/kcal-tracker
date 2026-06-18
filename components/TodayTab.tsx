@@ -3,16 +3,23 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import ProductSearch, { Product } from "@/components/ProductSearch";
-import { Pencil, X, Plus, Check, Trash2, ChevronRight, Beef, Droplets, Activity } from "lucide-react";
+import { Pencil, X, Plus, Check, Trash2, ChevronRight, Beef, Droplets, Wheat } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/context/LanguageContext";
 
 interface FoodEntry {
   id: string; name: string; calories: number;
-  protein: number; fat: number; entry_time: string;
+  protein: number; fat: number; carbs: number; entry_time: string;
 }
 interface Settings { budget: number; deficit: number; protein_goal: number | null; }
-interface BodyProfile { start_weight: number | null; goal_weight: number | null; current_weight: number | null; }
+interface BodyProfile {
+  start_weight: number | null; goal_weight: number | null; current_weight: number | null;
+  height_cm: number | null; age: number | null; gender: "male" | "female" | null;
+}
+
+function mifflin(weightKg: number, heightCm: number, age: number, gender: "male" | "female"): number {
+  return 10 * weightKg + 6.25 * heightCm - 5 * age + (gender === "male" ? 5 : -161);
+}
 interface Props {
   userId: string; settings: Settings;
   onGoToKoerper: () => void; onSettingsChange: (s: Settings) => void;
@@ -32,14 +39,26 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
   const [goalInput, setGoalInput]         = useState(String(settings.budget));
   const [saving, setSaving]               = useState(false);
   const [todaySteps, setTodaySteps]       = useState(0);
-  const [stepsInput, setStepsInput]       = useState("");
+  const [sportBurned, setSportBurned]     = useState(0);
 
   const today    = getTodayKey();
   const consumed = entries.reduce((s, e) => s + e.calories, 0);
   const totalProtein = Math.round(entries.reduce((s, e) => s + Number(e.protein), 0) * 10) / 10;
   const totalFat     = Math.round(entries.reduce((s, e) => s + Number(e.fat), 0) * 10) / 10;
-  const burnedFromSteps  = Math.round(todaySteps * 0.04);
-  const effectiveBudget  = settings.budget + burnedFromSteps;
+  const totalCarbs   = Math.round(entries.reduce((s, e) => s + Number(e.carbs), 0) * 10) / 10;
+
+  // Dynamic budget: baseTDEE = BMR × 1.2 (sedentary) + net activity − target deficit
+  const userWeight = Number(bodyProfile?.current_weight ?? bodyProfile?.start_weight ?? 75);
+  const bmr = bodyProfile?.height_cm && bodyProfile?.age && bodyProfile?.gender
+    ? mifflin(userWeight, bodyProfile.height_cm, bodyProfile.age, bodyProfile.gender)
+    : null;
+  const baseTdee = bmr ? Math.round(bmr * 1.2) : null;
+  // Weight-scaled steps (net: already excludes rest — steps are net activity)
+  const burnedFromSteps = Math.round(todaySteps * 0.04 * (userWeight / 75));
+  // effectiveBudget: dynamic if BMR data available, else fall back to stored budget
+  const effectiveBudget = baseTdee
+    ? (baseTdee - settings.deficit) + burnedFromSteps + sportBurned
+    : settings.budget + burnedFromSteps + sportBurned;
   const remaining = effectiveBudget - consumed;
   const pct       = Math.min((consumed / effectiveBudget) * 100, 100);
   const isOver    = remaining < 0;
@@ -52,7 +71,7 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
 
   const loadEntries = useCallback(async () => {
     const { data } = await supabase
-      .from("food_entries").select("id,name,calories,protein,fat,entry_time")
+      .from("food_entries").select("id,name,calories,protein,fat,carbs,entry_time")
       .eq("user_id", userId).eq("entry_date", today)
       .order("created_at", { ascending: false });
     setEntries(data ?? []);
@@ -60,7 +79,7 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
 
   const loadBodyProfile = useCallback(async () => {
     const { data } = await supabase
-      .from("body_profile").select("start_weight,goal_weight,current_weight")
+      .from("body_profile").select("start_weight,goal_weight,current_weight,height_cm,age,gender")
       .eq("user_id", userId).maybeSingle();
     setBodyProfile(data ?? null);
   }, [userId]);
@@ -72,7 +91,15 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
     setTodaySteps(data?.steps ?? 0);
   }, [userId]);
 
-  useEffect(() => { loadEntries(); loadBodyProfile(); loadTodaySteps(); }, [loadEntries, loadBodyProfile, loadTodaySteps]);
+  const loadSportBurned = useCallback(async () => {
+    const { data } = await supabase
+      .from("sport_entries").select("burned_kcal")
+      .eq("user_id", userId).eq("entry_date", today);
+    const total = (data ?? []).reduce((s: number, e: { burned_kcal: number | null }) => s + (e.burned_kcal ?? 0), 0);
+    setSportBurned(total);
+  }, [userId, today]);
+
+  useEffect(() => { loadEntries(); loadBodyProfile(); loadTodaySteps(); loadSportBurned(); }, [loadEntries, loadBodyProfile, loadTodaySteps, loadSportBurned]);
   useEffect(() => { if (refreshKey && refreshKey > 0) loadBodyProfile(); }, [refreshKey, loadBodyProfile]);
 
   async function handleAdd() {
@@ -101,18 +128,6 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
     toast(t.toastMealRemoved);
   }
 
-  async function handleSaveSteps() {
-    const s = parseInt(stepsInput, 10);
-    if (!s || s < 0) return;
-    await supabase.from("daily_steps").upsert(
-      { user_id: userId, logged_at: getTodayKey(), steps: s, updated_at: new Date().toISOString() },
-      { onConflict: "user_id,logged_at" }
-    );
-    setTodaySteps(s);
-    setStepsInput("");
-    toast.success(t.toastStepsSaved, { description: `${s.toLocaleString()} ${t.stepsLabel} · +${Math.round(s * 0.04)} kcal` });
-  }
-
   async function saveGoal() {
     const val = parseInt(goalInput, 10);
     if (!val || val < 1) return;
@@ -127,24 +142,24 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
   const startW   = bodyProfile?.start_weight   ?? null;
   const goalW    = bodyProfile?.goal_weight     ?? null;
   const currentW = bodyProfile?.current_weight  ?? startW;
-  const hasGoal  = startW !== null && goalW !== null;
+  const hasGoal  = startW !== null && goalW !== null && startW !== goalW;
   let weightProgress = 0, kgLeft = 0;
-  if (hasGoal && currentW !== null && startW !== goalW) {
-    const totalDiff = startW! - goalW!;
-    weightProgress = Math.max(0, Math.min(100, ((startW! - currentW) / totalDiff) * 100));
-    kgLeft = Math.max(0, currentW - goalW!);
+  if (hasGoal && currentW !== null) {
+    const total = Math.abs(startW! - goalW!);
+    const done  = Math.abs(startW! - currentW);
+    weightProgress = Math.max(0, Math.min(100, (done / total) * 100));
+    kgLeft = startW! > goalW!
+      ? Math.max(0, currentW - goalW!)
+      : Math.max(0, goalW! - currentW);
   }
 
   const card = "gc rounded-2xl";
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6 lg:items-start">
+    <div className="flex flex-col lg:grid lg:grid-cols-2 gap-4 lg:gap-6 lg:items-start">
 
-      {/* ── LEFT COLUMN ── */}
-      <div className="space-y-4">
-
-        {/* Calorie card */}
-        <div className={`${card} p-5`}>
+        {/* 1 — Calorie card: mobile 1st · desktop col1 row1 */}
+        <div className={`${card} p-5 lg:col-start-1 lg:row-start-1`}>
           <div className="flex items-start justify-between mb-4">
             <div>
               <div className="flex items-baseline gap-1.5">
@@ -181,33 +196,31 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
               style={{ width: `${pct}%` }}
             />
           </div>
-          <p className="text-xs text-slate-500 text-right mt-1.5">
-            {Math.round(pct)}% von {effectiveBudget} kcal
-            {burnedFromSteps > 0 && (
-              <span className="text-teal-600 dark:text-teal-400 ml-1.5">
-                (+{burnedFromSteps} {t.stepsBurnedKcal})
+          <div className="flex flex-col items-end mt-1.5 gap-0.5">
+            <span className="text-xs text-slate-500">{Math.round(pct)}% von {effectiveBudget} kcal</span>
+            {(burnedFromSteps > 0 || sportBurned > 0) && (
+              <span className="text-[10px] flex items-center gap-2">
+                {burnedFromSteps > 0 && (
+                  <span className="text-teal-600 dark:text-teal-400">+{burnedFromSteps} Schritte</span>
+                )}
+                {sportBurned > 0 && (
+                  <span className="text-orange-500 dark:text-orange-400">+{sportBurned} Sport</span>
+                )}
               </span>
             )}
-          </p>
+          </div>
 
           {/* Macro totals */}
-          <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.07]">
-            {/* Protein tile — shows goal + progress bar when protein_goal is set */}
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">
-              <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-1.5">
-                  <Beef size={13} className="text-emerald-500 dark:text-emerald-400" />
-                  <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{t.protein}</p>
-                </div>
-                {settings.protein_goal && (
-                  <span className="text-[10px] font-semibold text-emerald-600/70 dark:text-emerald-400/60">
-                    Ziel {settings.protein_goal}g
-                  </span>
-                )}
+          <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-black/[0.06] dark:border-white/[0.07]">
+            {/* Protein */}
+            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-2.5">
+              <div className="flex items-center gap-1 mb-1">
+                <Beef size={12} className="text-emerald-500 dark:text-emerald-400 shrink-0" />
+                <p className="text-xs font-medium text-emerald-600 dark:text-emerald-400 truncate">{t.protein}</p>
               </div>
-              <p className="text-lg font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+              <p className="text-base font-bold text-emerald-700 dark:text-emerald-300 tabular-nums leading-none">
                 {totalProtein}
-                <span className="text-xs font-normal ml-0.5 text-emerald-600 dark:text-emerald-500">
+                <span className="text-[10px] font-normal ml-0.5 text-emerald-600 dark:text-emerald-500">
                   {settings.protein_goal ? `/ ${settings.protein_goal}g` : "g"}
                 </span>
               </p>
@@ -225,13 +238,24 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
                 </div>
               )}
             </div>
-            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-3">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Droplets size={13} className="text-orange-500 dark:text-orange-400" />
-                <p className="text-xs font-medium text-orange-600 dark:text-orange-400">{t.fat}</p>
+            {/* Fat */}
+            <div className="bg-orange-500/10 border border-orange-500/20 rounded-xl p-2.5">
+              <div className="flex items-center gap-1 mb-1">
+                <Droplets size={12} className="text-orange-500 dark:text-orange-400 shrink-0" />
+                <p className="text-xs font-medium text-orange-600 dark:text-orange-400 truncate">{t.fat}</p>
               </div>
-              <p className="text-lg font-bold text-orange-700 dark:text-orange-300 tabular-nums">
-                {totalFat}<span className="text-xs font-normal ml-0.5 text-orange-600 dark:text-orange-500">g</span>
+              <p className="text-base font-bold text-orange-700 dark:text-orange-300 tabular-nums leading-none">
+                {totalFat}<span className="text-[10px] font-normal ml-0.5 text-orange-600 dark:text-orange-500">g</span>
+              </p>
+            </div>
+            {/* Carbs */}
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5">
+              <div className="flex items-center gap-1 mb-1">
+                <Wheat size={12} className="text-amber-500 dark:text-amber-400 shrink-0" />
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-400 truncate">KH</p>
+              </div>
+              <p className="text-base font-bold text-amber-700 dark:text-amber-300 tabular-nums leading-none">
+                {totalCarbs}<span className="text-[10px] font-normal ml-0.5 text-amber-600 dark:text-amber-500">g</span>
               </p>
             </div>
           </div>
@@ -255,85 +279,8 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
           )}
         </div>
 
-        {/* Steps card */}
-        <div className={`${card} p-5`}>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="w-8 h-8 bg-teal-500/15 rounded-xl flex items-center justify-center shrink-0">
-              <Activity size={16} className="text-teal-500 dark:text-teal-400" />
-            </div>
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">{t.stepsToday}</p>
-            {todaySteps > 0 && (
-              <span className="ml-auto text-xs font-semibold text-teal-600 dark:text-teal-400">
-                +{burnedFromSteps} kcal
-              </span>
-            )}
-          </div>
-
-          {todaySteps > 0 && (
-            <p className="text-2xl font-bold tabular-nums text-teal-600 dark:text-teal-400 mb-3">
-              {todaySteps.toLocaleString()}
-              <span className="text-sm font-normal text-slate-500 ml-1.5">{t.stepsLabel}</span>
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={stepsInput}
-              onChange={(e) => setStepsInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSaveSteps()}
-              placeholder={todaySteps > 0 ? String(todaySteps) : t.stepsPlaceholder}
-              min="0"
-              className="gi flex-1 min-w-0 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 transition-all"
-            />
-            <button
-              onClick={handleSaveSteps}
-              disabled={!stepsInput}
-              className="flex items-center gap-1.5 font-semibold rounded-xl px-3 py-3 text-sm transition-all disabled:opacity-30 text-white whitespace-nowrap shrink-0"
-              style={{ background: "linear-gradient(135deg,#14b8a6,#0d9488)", boxShadow: "0 4px 16px rgba(20,184,166,0.30)" }}
-            >
-              <Check size={14} /> {t.logSteps}
-            </button>
-          </div>
-        </div>
-
-        {/* Weight goal card */}
-        {hasGoal ? (
-          <div className={`${card} p-5`}>
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-semibold text-slate-900 dark:text-white">{t.weightGoal}</span>
-              <button onClick={onGoToKoerper} className="flex items-center gap-1 text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 font-medium transition-colors">
-                {t.editGoal} <ChevronRight size={14} />
-              </button>
-            </div>
-            <div className="w-full bg-black/[0.07] dark:bg-white/[0.08] rounded-full h-2 mb-2.5 overflow-hidden">
-              <div className="h-2 rounded-full bg-gradient-to-r from-blue-400 to-violet-500 transition-all duration-500" style={{ width: `${weightProgress}%` }} />
-            </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-slate-500">
-                {currentW !== null ? `${t.currentWeightLabel}: ${currentW} kg` : `${t.startWeightLabel}: ${startW} kg`}
-              </span>
-              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                {kgLeft > 0 ? `${t.kgRemaining} ${kgLeft.toFixed(1)} kg → ${goalW} kg` : t.goalReached}
-              </span>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={onGoToKoerper}
-            className={`w-full ${card} p-4 flex items-center justify-between text-sm text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 transition-all`}
-          >
-            <span>{t.setWeightGoal}</span>
-            <ChevronRight size={16} />
-          </button>
-        )}
-      </div>
-
-      {/* ── RIGHT COLUMN ── */}
-      <div className="space-y-4">
-
-        {/* Meal entry card */}
-        <div className={`${card} p-5`}>
+        {/* 2 — Meal entry: mobile 2nd · desktop col2 row1 */}
+        <div className={`${card} p-5 lg:col-start-2 lg:row-start-1`}>
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
             {t.mealCapture}
           </p>
@@ -344,7 +291,6 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
               onSelect={(p) => { setSelectedProduct(p); setProductName(p.name); }}
               userId={userId}
             />
-
             <div className="flex gap-2">
               <div className="relative flex-1 min-w-0">
                 <input
@@ -367,7 +313,6 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
                 <Plus size={15} /> {t.addMeal}
               </button>
             </div>
-
             {calcKcal !== null && (
               <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-2.5 flex flex-wrap gap-x-4 gap-y-1">
                 <span className="text-xs font-bold text-blue-600 dark:text-blue-300">{calcKcal} kcal</span>
@@ -376,21 +321,20 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
                 <span className="text-xs text-slate-500">KH: {calcCarbs}g</span>
               </div>
             )}
-
             {!selectedProduct && productName.length >= 2 && (
               <p className="text-xs text-slate-500 px-1">{t.selectProductFirst}</p>
             )}
           </div>
         </div>
 
-        {/* Entries */}
+        {/* 3 — Entries: mobile 3rd · desktop col2 row2 */}
         {entries.length === 0 ? (
-          <div className="text-center py-10">
+          <div className="text-center py-10 lg:col-start-2 lg:row-start-2">
             <p className="text-sm text-slate-500">{t.noMealsToday}</p>
             <p className="text-xs text-slate-400 dark:text-slate-600 mt-1">{t.noMealsSubtitle}</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="space-y-2 lg:col-start-2 lg:row-start-2">
             {entries.map((e) => (
               <div key={e.id} className={`${card} px-4 py-3.5 flex items-center justify-between`}>
                 <div className="min-w-0 flex-1">
@@ -414,7 +358,37 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
             ))}
           </div>
         )}
-      </div>
+
+        {/* 4 — Weight goal: mobile 4th · desktop col1 row2 */}
+        {hasGoal ? (
+          <div className={`${card} p-5 lg:col-start-1 lg:row-start-2`}>
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-semibold text-slate-900 dark:text-white">{t.weightGoal}</span>
+              <button onClick={onGoToKoerper} className="flex items-center gap-1 text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 font-medium transition-colors">
+                {t.editGoal} <ChevronRight size={14} />
+              </button>
+            </div>
+            <div className="w-full bg-black/[0.07] dark:bg-white/[0.08] rounded-full h-2 mb-2.5 overflow-hidden">
+              <div className="h-2 rounded-full bg-gradient-to-r from-blue-400 to-violet-500 transition-all duration-500" style={{ width: `${weightProgress}%` }} />
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-xs text-slate-500">
+                {currentW !== null ? `${t.currentWeightLabel}: ${currentW} kg` : `${t.startWeightLabel}: ${startW} kg`}
+              </span>
+              <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                {kgLeft > 0 ? `${t.kgRemaining} ${kgLeft.toFixed(1)} kg → ${goalW} kg` : t.goalReached}
+              </span>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={onGoToKoerper}
+            className={`w-full ${card} p-4 flex items-center justify-between text-sm text-slate-500 hover:text-blue-500 dark:hover:text-blue-400 transition-all lg:col-start-1 lg:row-start-2`}
+          >
+            <span>{t.setWeightGoal}</span>
+            <ChevronRight size={16} />
+          </button>
+        )}
     </div>
   );
 }

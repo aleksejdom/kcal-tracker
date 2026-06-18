@@ -1,0 +1,70 @@
+Bereich;Variable;Formel;Einheit;Anmerkung
+HEUTE-TAB;consumed;Summe(entry.calories);kcal;Alle Einträge des heutigen Tages
+HEUTE-TAB;totalProtein;Summe(entry.protein);g;1 Dezimalstelle
+HEUTE-TAB;totalFat;Summe(entry.fat);g;1 Dezimalstelle
+HEUTE-TAB;totalCarbs;Summe(entry.carbs);g;1 Dezimalstelle
+HEUTE-TAB;burnedFromSteps;Schritte × 0,04;kcal;
+HEUTE-TAB;sportBurned;Summe(sport_entry.burned_kcal);kcal;Nur heutiger Tag
+HEUTE-TAB;effectiveBudget;budget + burnedFromSteps + sportBurned;kcal;
+HEUTE-TAB;remaining;effectiveBudget − consumed;kcal;Negativ = Überschuss
+HEUTE-TAB;pct;MIN(consumed / effectiveBudget × 100; 100);%;Fortschrittsbalken
+HEUTE-TAB;calcKcal;RUNDEN(Produkt.kcal × Menge / 100; 0);kcal;Portionsberechnung
+HEUTE-TAB;calcProtein;RUNDEN(Produkt.protein × Menge / 100; 1);g;Portionsberechnung
+HEUTE-TAB;calcFat;RUNDEN(Produkt.fat × Menge / 100; 1);g;Portionsberechnung
+HEUTE-TAB;calcCarbs;RUNDEN(Produkt.carbs × Menge / 100; 1);g;Portionsberechnung
+HEUTE-TAB;weightProgress;MAX(0; MIN(100; (startW − aktW) / (startW − zielW) × 100));%;Gewichtsziel-Fortschritt
+HEUTE-TAB;kgLeft;MAX(0; aktuellesGewicht − Zielgewicht);kg;
+HEUTE-TAB;Proteinbalken;MIN(totalProtein / proteinZiel × 100; 100);%;
+KÖRPER-TAB;BMI;Gewicht_kg / (Größe_m)²;kg/m²;Body-Mass-Index
+KÖRPER-TAB;BMR (Mann);10 × Gewicht + 6,25 × Größe_cm − 5 × Alter + 5;kcal/Tag;Mifflin-St Jeor
+KÖRPER-TAB;BMR (Frau);10 × Gewicht + 6,25 × Größe_cm − 5 × Alter − 161;kcal/Tag;Mifflin-St Jeor
+KÖRPER-TAB;TDEE (sitzend);BMR × 1,20;kcal/Tag;Kaum Bewegung
+KÖRPER-TAB;TDEE (leicht);BMR × 1,375;kcal/Tag;1–3× Sport/Woche
+KÖRPER-TAB;TDEE (moderat);BMR × 1,55;kcal/Tag;3–5× Sport/Woche
+KÖRPER-TAB;TDEE (aktiv);BMR × 1,725;kcal/Tag;6–7× Sport/Woche
+KÖRPER-TAB;TDEE (sehr aktiv);BMR × 1,90;kcal/Tag;Täglich intensiv
+KÖRPER-TAB;weightToLose;Startgewicht − Zielgewicht;kg;
+KÖRPER-TAB;totalKcal;weightToLose × 7700;kcal;Gesamt-Kaloriendefizit
+KÖRPER-TAB;dailyDeficit;RUNDEN(totalKcal / (Wochen × 7); 0);kcal/Tag;Tägliches Defizit
+KÖRPER-TAB;rawBudget;TDEE − dailyDeficit;kcal/Tag;Vor Untergrenze
+KÖRPER-TAB;budget;MAX(rawBudget; minKcal);kcal/Tag;minKcal: 1500 (M) / 1200 (F)
+KÖRPER-TAB;actualDeficit;TDEE − budget;kcal/Tag;Tatsächliches Defizit nach Untergrenze
+KÖRPER-TAB;proteinZiel;RUNDEN(Körpergewicht × 2,0; 0);g/Tag;
+KÖRPER-TAB;minWeeks;AUFRUNDEN(totalKcal / (1000 × 7); 0);Wochen;Mindestdauer bei max. 1000 kcal/Tag Defizit
+SPORT-TAB;kcal (Min);MET × Gewicht_kg × (Minuten / 60);kcal;Zeitbasierte Aktivität
+SPORT-TAB;kcal (Std);MET × Gewicht_kg × Stunden;kcal;Zeitbasierte Aktivität
+SPORT-TAB;kcal (Stück);kcal_pro_Wdh × Anzahl;kcal;Wiederholungsbasiert
+SPORT-TAB;MET Laufen;9,8;;
+SPORT-TAB;MET Radfahren;7,5;;
+SPORT-TAB;MET Schwimmen;7,0;;
+SPORT-TAB;MET Kettlebell;6,0;;
+SPORT-TAB;MET Yoga;2,5;;
+SPORT-TAB;kcal/Wdh Klimmzüge;0,8;kcal;
+SPORT-TAB;kcal/Wdh Kniebeugen;0,4;kcal;
+SPORT-TAB;kcal/Wdh Liegestützen;0,3;kcal;
+SPORT-TAB;kcal/Wdh Sit-ups;0,2;kcal;
+SPORT-TAB;burnedFromSteps;Schritte × 0,04;kcal;
+SPORT-TAB;totalBurnedToday;Summe(entry.burned_kcal heute);kcal;
+SPORT-TAB;progress (Monats-Challenge);MIN(dieserMonat / letzterMonat × 100; 100);%;
+SPORT-TAB;remaining (Rekord);MAX(0; letzterMonat − dieserMonat);Einheiten;
+VERLAUF-TAB;burned (Schritte);RUNDEN(Schritte × 0,04; 0);kcal;Pro Tag
+VERLAUF-TAB;sportBurnedDay;Summe(sport_entries.burned_kcal);kcal;Pro Tag
+VERLAUF-TAB;effectiveDayBudget;budget + burned + sportBurnedDay;kcal;Pro Tag
+VERLAUF-TAB;diffToTarget;day.total − effectiveDayBudget;kcal;Pro Tag
+VERLAUF-TAB;pct (Balken);MIN(day.total / effectiveDayBudget × 100; 100);%;Pro Tag
+VERLAUF-TAB;realDeficit;TDEE − day.total;kcal;Pro Tag
+VERLAUF-TAB;daysUnder;Anzahl Tage mit: total ≤ budget + sportB + stepB;Tage;30-Tage-Statistik
+VERLAUF-TAB;avgStepsVal;Summe(Schritte) / n;Schritte;30-Tage-Statistik
+VERLAUF-TAB;avgDiffAll;Summe(total − budget − sportB − stepB) / n;kcal;30-Tage-Statistik
+VERLAUF-TAB;avgCal;Summe(day.total) / n;kcal;Zielanalyse 7/30 Tage
+VERLAUF-TAB;avgDiff;Summe(total − budget − sportB − stepB) / n;kcal;Zielanalyse 7/30 Tage
+VERLAUF-TAB;avgRealDeficit;Summe(TDEE + sportB − total) / n;kcal;Zielanalyse 7/30 Tage
+VERLAUF-TAB;verbleibende_kcal;verbleibendes_kg × 7700;kcal;Prognose
+VERLAUF-TAB;Tage_bis_Ziel;verbleibende_kcal / avgRealDeficit;Tage;Prognose
+VERLAUF-TAB;daysSince (Toast);ABRUNDEN((jetzt − letztesSportDatum) / 86400000; 0);Tage;Sport-Warnung > 3 Tage
+KONSTANTEN;kcal pro Schritt;0,04;kcal/Schritt;Alle Tabs
+KONSTANTEN;kcal pro kg Körperfett;7700;kcal/kg;Alle Tabs
+KONSTANTEN;Protein-Multiplikator;2,0;g/kg;KoerperTab
+KONSTANTEN;Mindestbudget Mann;1500;kcal/Tag;KoerperTab
+KONSTANTEN;Mindestbudget Frau;1200;kcal/Tag;KoerperTab
+KONSTANTEN;ms pro Tag;86400000;ms;VerlaufTab Toast

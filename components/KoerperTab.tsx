@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Check, Scale, Trash2, TrendingDown, TrendingUp, Minus, Target, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -126,10 +126,13 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
   const [weeks, setWeeks] = useState(12);
   const [activity, setActivity] = useState<ActivityKey>("moderate");
 
+  const skipSaveRef = useRef(true);
+
   const loadProfile = useCallback(async () => {
+    skipSaveRef.current = true;
     const { data } = await supabase
       .from("body_profile")
-      .select("start_weight,goal_weight,height_cm,age,current_weight,gender")
+      .select("start_weight,goal_weight,height_cm,age,current_weight,gender,calc_weeks,calc_activity")
       .eq("user_id", userId).maybeSingle();
     if (data) {
       setProfile({
@@ -140,7 +143,12 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
         current_weight: data.current_weight?.toString() ?? "",
         gender:         (data.gender as "male" | "female") ?? "",
       });
+      if (data.calc_weeks) setWeeks(data.calc_weeks);
+      if (data.calc_activity && ACTIVITY_OPTIONS.some((o) => o.key === data.calc_activity))
+        setActivity(data.calc_activity as ActivityKey);
     }
+    // Allow saving only after all loaded state updates have been processed
+    setTimeout(() => { skipSaveRef.current = false; }, 0);
   }, [userId]);
 
   const loadWeightLog = useCallback(async () => {
@@ -155,15 +163,19 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
 
   useEffect(() => { loadProfile(); loadWeightLog(); }, [loadProfile, loadWeightLog]);
 
-  /* ── Persist calculator preferences in localStorage ── */
+  /* ── Debounced save of calculator preferences to Supabase ── */
+  const calcPrefTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    const w = localStorage.getItem(`kcal-calc-weeks-${userId}`);
-    if (w) setWeeks(parseInt(w));
-    const a = localStorage.getItem(`kcal-calc-activity-${userId}`) as ActivityKey | null;
-    if (a && ACTIVITY_OPTIONS.some((o) => o.key === a)) setActivity(a);
-  }, [userId]);
-  useEffect(() => { localStorage.setItem(`kcal-calc-weeks-${userId}`, String(weeks)); }, [weeks, userId]);
-  useEffect(() => { localStorage.setItem(`kcal-calc-activity-${userId}`, activity); }, [activity, userId]);
+    if (skipSaveRef.current) return;
+    if (calcPrefTimer.current) clearTimeout(calcPrefTimer.current);
+    calcPrefTimer.current = setTimeout(() => {
+      supabase.from("body_profile").upsert(
+        { user_id: userId, calc_weeks: weeks, calc_activity: activity },
+        { onConflict: "user_id" }
+      );
+    }, 800);
+    return () => { if (calcPrefTimer.current) clearTimeout(calcPrefTimer.current); };
+  }, [weeks, activity, userId]);
 
   /* ── Chart: filter by period ── */
   const chartEntries = useMemo(() => {
@@ -201,10 +213,19 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
     const budget    = Math.max(rawBudget, minKcal);
     const actualDeficit = tdee - budget;
     const proteinGoal   = Math.round(bodyW * 2.0);
-    const isHighDeficit    = dailyDeficit > 1000;
-    const isTooLowCalories = rawBudget < minKcal;
+    const isHighDeficit       = dailyDeficit > 1000;
+    const isTooLowCalories    = rawBudget < minKcal;
+    const isDeficitOver30Pct  = dailyDeficit / tdee > 0.3;
+    const isBudgetBelowBMR    = budget < bmr;
+    const maxLossPerWeekKg    = parseFloat((bodyW * 0.01).toFixed(2));
+    const projectedWeeklyLoss = parseFloat(((dailyDeficit * 7) / 7700).toFixed(2));
+    const isTooFast           = projectedWeeklyLoss > maxLossPerWeekKg;
     const minWeeks = Math.ceil(totalKcal / (1000 * 7));
-    return { ok: true, dailyDeficit, actualDeficit, tdee, budget, proteinGoal, isHighDeficit, isTooLowCalories, minWeeks } as const;
+    return {
+      ok: true, dailyDeficit, actualDeficit, tdee, budget, proteinGoal, bmr,
+      isHighDeficit, isTooLowCalories, isDeficitOver30Pct, isBudgetBelowBMR,
+      isTooFast, maxLossPerWeekKg, projectedWeeklyLoss, minWeeks,
+    } as const;
   }, [profile, weeks, activity]);
 
   /* ── Handlers ── */
@@ -246,9 +267,14 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
     const proteinGoal = calc.proteinGoal as number;
     const deficit     = calc.actualDeficit as number;
     setApplyingSaving(true);
-    await supabase.from("user_settings").upsert({
-      user_id: userId, budget, deficit, protein_goal: proteinGoal,
-    }, { onConflict: "user_id" });
+    await Promise.all([
+      supabase.from("user_settings").upsert({
+        user_id: userId, budget, deficit, protein_goal: proteinGoal,
+      }, { onConflict: "user_id" }),
+      supabase.from("body_profile").upsert({
+        user_id: userId, calc_weeks: weeks, calc_activity: activity,
+      }, { onConflict: "user_id" }),
+    ]);
     setApplyingSaving(false);
     toast.success(t.toastGoalsSaved, { description: `${budget} kcal · ${proteinGoal}g ${t.protein}` });
     onGoalsApplied?.(budget, proteinGoal);
@@ -472,14 +498,42 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
             </div>
 
             {/* Warnings */}
-            {(calc.isHighDeficit || calc.isTooLowCalories) && (
-              <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
-                <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  {calc.isHighDeficit
-                    ? `${t.warningHighDeficit} ${calc.minWeeks} ${t.warningMinWeeksUnit}`
-                    : t.warningLowCalories}
-                </p>
+            {(calc.isHighDeficit || calc.isTooLowCalories || calc.isDeficitOver30Pct || calc.isBudgetBelowBMR || calc.isTooFast) && (
+              <div className="space-y-2">
+                {(calc.isHighDeficit || calc.isTooLowCalories) && (
+                  <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
+                    <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      {calc.isHighDeficit
+                        ? `${t.warningHighDeficit} ${calc.minWeeks} ${t.warningMinWeeksUnit}`
+                        : t.warningLowCalories}
+                    </p>
+                  </div>
+                )}
+                {calc.isDeficitOver30Pct && (
+                  <div className="flex items-start gap-2 bg-orange-500/10 border border-orange-500/20 rounded-xl px-4 py-3">
+                    <Info size={14} className="text-orange-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-orange-600 dark:text-orange-400">
+                      Defizit über 30 % des TDEE ({Math.round((calc.dailyDeficit / calc.tdee) * 100)} %). Muskelabbau wahrscheinlich.
+                    </p>
+                  </div>
+                )}
+                {calc.isBudgetBelowBMR && (
+                  <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3">
+                    <Info size={14} className="text-red-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-red-600 dark:text-red-400">
+                      Budget ({calc.budget} kcal) liegt unter dem Grundumsatz ({Math.round(calc.bmr)} kcal). Stoffwechselschäden möglich.
+                    </p>
+                  </div>
+                )}
+                {calc.isTooFast && !calc.isBudgetBelowBMR && (
+                  <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/20 rounded-xl px-4 py-3">
+                    <Info size={14} className="text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-600 dark:text-amber-400">
+                      Progn. Verlust {calc.projectedWeeklyLoss} kg/Woche übersteigt empf. Maximum ({calc.maxLossPerWeekKg} kg = 1 % Körpergewicht).
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 

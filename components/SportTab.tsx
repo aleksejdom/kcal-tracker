@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { Dumbbell, Plus, Trash2, Trophy, Flame, ChevronDown, Check } from "lucide-react";
+import { Dumbbell, Plus, Trash2, Trophy, Flame, ChevronDown, Check, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -14,6 +14,35 @@ interface SportEntry {
   amount: number;
   unit: Unit;
   entry_date: string;
+  burned_kcal: number | null;
+}
+
+// MET values for timed activities (kcal = MET × weight_kg × hours)
+const MET: Record<string, number> = {
+  "Laufen":     9.8,
+  "Radfahren":  7.5,
+  "Schwimmen":  7.0,
+  "Yoga":       2.5,
+  "Kettlebell": 6.0,
+};
+// kcal per rep for piece-based activities (at ~75 kg)
+const KCAL_PER_REP: Record<string, number> = {
+  "Liegestützen": 0.3,
+  "Klimmzüge":    0.8,
+  "Sit-ups":      0.2,
+  "Kniebeugen":   0.4,
+};
+
+function suggestKcal(name: string, amount: number, unit: Unit, weightKg: number): number | null {
+  const met = MET[name];
+  if (met && (unit === "Min" || unit === "Std")) {
+    const hours = unit === "Min" ? amount / 60 : amount;
+    // Net-MET: subtract resting metabolism (1 MET) to avoid double-counting
+    return Math.round((met - 1) * weightKg * hours);
+  }
+  const perRep = KCAL_PER_REP[name];
+  if (perRep && unit === "Stück") return Math.round(perRep * amount);
+  return null;
 }
 
 interface Props { userId: string; }
@@ -45,6 +74,10 @@ export default function SportTab({ userId }: Props) {
   const [unit,         setUnit]         = useState<Unit>("Stück");
   const [saving,       setSaving]       = useState(false);
   const [showAll,      setShowAll]      = useState(false);
+  const [todaySteps,   setTodaySteps]   = useState(0);
+  const [stepsInput,   setStepsInput]   = useState("");
+  const [burnedKcal,   setBurnedKcal]   = useState("");
+  const [userWeight,   setUserWeight]   = useState(75);
 
   const now   = new Date();
   const today = now.toISOString().split("T")[0];
@@ -57,7 +90,7 @@ export default function SportTab({ userId }: Props) {
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("sport_entries")
-      .select("id,activity_name,amount,unit,entry_date")
+      .select("id,activity_name,amount,unit,entry_date,burned_kcal")
       .eq("user_id", userId)
       .gte("entry_date", lastMonthStart)
       .order("created_at", { ascending: false });
@@ -68,18 +101,59 @@ export default function SportTab({ userId }: Props) {
     setLastMonthEntries(all.filter((e) => e.entry_date >= lastMonthStart && e.entry_date <= lastMonthEnd));
   }, [userId, today, thisMonthStart, lastMonthStart, lastMonthEnd]);
 
-  useEffect(() => { load(); }, [load]);
+  const loadSteps = useCallback(async () => {
+    const { data } = await supabase
+      .from("daily_steps").select("steps")
+      .eq("user_id", userId).eq("logged_at", today).maybeSingle();
+    setTodaySteps(data?.steps ?? 0);
+  }, [userId, today]);
+
+  useEffect(() => {
+    load();
+    loadSteps();
+    supabase.from("body_profile").select("current_weight,start_weight").eq("user_id", userId).maybeSingle()
+      .then(({ data }) => {
+        const w = parseFloat(data?.current_weight ?? data?.start_weight ?? "75");
+        if (w > 0) setUserWeight(w);
+      });
+  }, [load, loadSteps, userId]);
+
+  // Auto-suggest burned kcal when activity / amount / unit changes
+  useEffect(() => {
+    const amtNum = parseFloat(amount);
+    if (!activityName || !amtNum) { setBurnedKcal(""); return; }
+    const suggestion = suggestKcal(activityName, amtNum, unit, userWeight);
+    if (suggestion !== null) setBurnedKcal(String(suggestion));
+    // don't clear manual entries for unknown activities
+  }, [activityName, amount, unit, userWeight]);
+
+  async function handleSaveSteps() {
+    const s = parseInt(stepsInput, 10);
+    if (!s || s < 0) return;
+    await supabase.from("daily_steps").upsert(
+      { user_id: userId, logged_at: today, steps: s, updated_at: new Date().toISOString() },
+      { onConflict: "user_id,logged_at" }
+    );
+    setTodaySteps(s);
+    setStepsInput("");
+    toast.success(t.toastStepsSaved, { description: `${s.toLocaleString()} ${t.stepsLabel} · +${Math.round(s * 0.04)} kcal` });
+  }
 
   async function handleAdd() {
     if (!activityName.trim() || !amount) return;
     setSaving(true);
+    const kcalVal = parseInt(burnedKcal, 10);
     const { error } = await supabase.from("sport_entries").insert({
       user_id: userId, entry_date: today,
       activity_name: activityName.trim(), amount: parseFloat(amount), unit,
+      burned_kcal: kcalVal > 0 ? kcalVal : null,
     });
     if (!error) {
-      toast.success(t.toastActivityAdded, { description: `${activityName.trim()} · ${amount} ${unit}` });
-      setActivityName(""); setAmount("");
+      const kcal = parseInt(burnedKcal, 10);
+      toast.success(t.toastActivityAdded, {
+        description: `${activityName.trim()} · ${amount} ${unit}${kcal > 0 ? ` · -${kcal} kcal` : ""}`,
+      });
+      setActivityName(""); setAmount(""); setBurnedKcal("");
       await load();
     }
     setSaving(false);
@@ -109,8 +183,11 @@ export default function SportTab({ userId }: Props) {
   const breakdownEntries = Object.entries(breakdown).sort((a, b) => b[1].count - a[1].count);
 
   const card = "gc rounded-2xl";
-
   const visibleToday = showAll ? todayEntries : todayEntries.slice(0, 4);
+  const totalBurnedToday = useMemo(
+    () => todayEntries.reduce((s, e) => s + (e.burned_kcal ?? 0), 0),
+    [todayEntries]
+  );
 
   return (
     <div className="space-y-4">
@@ -276,6 +353,20 @@ export default function SportTab({ userId }: Props) {
               <Plus size={15} />
             </button>
           </div>
+
+          {/* Burned kcal */}
+          <div className="flex items-center gap-2">
+            <Flame size={14} className="text-orange-500 shrink-0" />
+            <input
+              type="number"
+              value={burnedKcal}
+              onChange={(e) => setBurnedKcal(e.target.value)}
+              placeholder={t.sportBurnedKcalPlaceholder}
+              min="0"
+              className="gi flex-1 min-w-0 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500/50 transition-all"
+            />
+            <span className="text-xs text-slate-400 shrink-0">kcal</span>
+          </div>
         </div>
       </div>
 
@@ -297,6 +388,11 @@ export default function SportTab({ userId }: Props) {
                 <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">{e.activity_name}</p>
               </div>
               <div className="flex items-center gap-3 ml-3 shrink-0">
+                {e.burned_kcal != null && e.burned_kcal > 0 && (
+                  <span className="text-xs font-semibold text-orange-500 dark:text-orange-400 tabular-nums">
+                    -{e.burned_kcal} kcal
+                  </span>
+                )}
                 <span className="text-sm font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                   {Number(e.amount) % 1 === 0 ? e.amount : Number(e.amount).toFixed(1)}
                   <span className="text-xs font-normal text-slate-500 ml-1">{e.unit}</span>
@@ -321,6 +417,53 @@ export default function SportTab({ userId }: Props) {
           )}
         </div>
       )}
+
+      {/* ── Steps ── */}
+      <div className={`${card} p-5`}>
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-8 h-8 bg-teal-500/15 rounded-xl flex items-center justify-center shrink-0">
+            <Activity size={16} className="text-teal-500 dark:text-teal-400" />
+          </div>
+          <p className="text-sm font-semibold text-slate-900 dark:text-white">{t.stepsToday}</p>
+          <div className="ml-auto flex items-center gap-2">
+            {totalBurnedToday > 0 && (
+              <span className="text-xs font-semibold text-orange-500 dark:text-orange-400">
+                -{totalBurnedToday} kcal {t.sportBurnedTotal}
+              </span>
+            )}
+            {todaySteps > 0 && (
+              <span className="text-xs font-semibold text-teal-600 dark:text-teal-400">
+                +{Math.round(todaySteps * 0.04)} kcal
+              </span>
+            )}
+          </div>
+        </div>
+        {todaySteps > 0 && (
+          <p className="text-2xl font-bold tabular-nums text-teal-600 dark:text-teal-400 mb-3">
+            {todaySteps.toLocaleString()}
+            <span className="text-sm font-normal text-slate-500 ml-1.5">{t.stepsLabel}</span>
+          </p>
+        )}
+        <div className="flex gap-2">
+          <input
+            type="number"
+            value={stepsInput}
+            onChange={(e) => setStepsInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSaveSteps()}
+            placeholder={todaySteps > 0 ? String(todaySteps) : t.stepsPlaceholder}
+            min="0"
+            className="gi flex-1 min-w-0 rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/50 transition-all"
+          />
+          <button
+            onClick={handleSaveSteps}
+            disabled={!stepsInput}
+            className="flex items-center gap-1.5 font-semibold rounded-xl px-3 py-3 text-sm transition-all disabled:opacity-30 text-white whitespace-nowrap shrink-0"
+            style={{ background: "linear-gradient(135deg,#14b8a6,#0d9488)", boxShadow: "0 4px 16px rgba(20,184,166,0.30)" }}
+          >
+            <Check size={14} /> {t.logSteps}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -209,6 +209,10 @@ export const translations = {
     toastActivityAdded: "Aktivität eingetragen",
     toastActivityRemoved: "Aktivität entfernt",
     sportHistoryLabel: "Sport",
+    sportBurnedKcal: "Kalorien verbrannt",
+    sportBurnedKcalPlaceholder: "kcal verbrannt (optional)",
+    sportBurnedSuggested: "Vorschlag",
+    sportBurnedTotal: "Sport verbrannt",
 
     // BMI
     bmiLabel: "BMI",
@@ -468,6 +472,10 @@ export const translations = {
     toastActivityAdded: "Активность добавлена",
     toastActivityRemoved: "Активность удалена",
     sportHistoryLabel: "Спорт",
+    sportBurnedKcal: "Сожжено калорий",
+    sportBurnedKcalPlaceholder: "ккал сожжено (необяз.)",
+    sportBurnedSuggested: "Предложение",
+    sportBurnedTotal: "Спорт сожжено",
 
     // BMI
     bmiLabel: "ИМТ",

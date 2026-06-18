@@ -8,7 +8,7 @@ import { useLanguage } from "@/context/LanguageContext";
 
 interface DayEntry { date: string; total: number; count: number; }
 interface FoodItem { id: string; name: string; calories: number; protein: number; fat: number; entry_time: string; }
-interface SportItem { id: string; activity_name: string; amount: number; unit: string; }
+interface SportItem { id: string; activity_name: string; amount: number; unit: string; burned_kcal: number | null; }
 interface Props { userId: string; budget: number; deficit: number; }
 
 type PrognosisResult =
@@ -22,6 +22,7 @@ type PrognosisResult =
 function InfoTooltip({ text }: { text: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const isTouchRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
@@ -40,22 +41,23 @@ function InfoTooltip({ text }: { text: string }) {
     <div
       ref={ref}
       className="relative inline-flex shrink-0"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onTouchStart={() => { isTouchRef.current = true; }}
+      onMouseEnter={() => { if (!isTouchRef.current) setOpen(true); }}
+      onMouseLeave={() => { if (!isTouchRef.current) setOpen(false); }}
     >
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}
-        className="text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors ml-1 leading-none"
+        className="text-slate-400 hover:text-blue-500 dark:hover:text-blue-400 transition-colors ml-1 flex items-center justify-center p-[11px] sm:p-0.5 -m-[11px] sm:m-0 sm:ml-1"
         aria-label="Erklärung"
       >
-        <Info size={12} />
+        <Info className="w-[30px] h-[30px] sm:w-3 sm:h-3" />
       </button>
       {open && (
-        <div className="absolute z-50 bottom-full left-0 mb-2 w-64 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-black/[0.06] dark:border-white/[0.10] p-3">
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 rounded-xl bg-white dark:bg-slate-800 shadow-xl border border-black/[0.06] dark:border-white/[0.10] p-3">
           <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">{text}</p>
           {/* Arrow */}
-          <div className="absolute top-full left-3">
+          <div className="absolute top-full left-1/2 -translate-x-1/2">
             <svg width="12" height="6" viewBox="0 0 12 6" className="overflow-visible">
               <path d="M0 0 L6 6 L12 0Z" className="fill-white dark:fill-slate-800" />
               <path d="M0 0 L6 6 L12 0" fill="none" stroke="black" strokeOpacity="0.06" strokeWidth="1" />
@@ -112,11 +114,22 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [currentWeight, setCurrentWeight] = useState<number | null>(null);
   const [goalWeight, setGoalWeight]     = useState<number | null>(null);
+  const [userHeight, setUserHeight]     = useState<number | null>(null);
+  const [userAge, setUserAge]           = useState<number | null>(null);
+  const [userGender, setUserGender]     = useState<"male" | "female" | null>(null);
   const [analysisPeriod, setAnalysisPeriod] = useState<7 | 30>(7);
+  const sportToastRef = useRef(false);
 
   const locale = lang === "ru" ? "ru-RU" : "de-DE";
   const tdee = budget + deficit;
   const hasTdeeData = deficit > 0;
+
+  // Dynamic baseTdee from body profile (BMR × 1.2 sedentary baseline)
+  const baseTdee = useMemo(() => {
+    if (!currentWeight || !userHeight || !userAge || !userGender) return null;
+    const bmr = 10 * currentWeight + 6.25 * userHeight - 5 * userAge + (userGender === "male" ? 5 : -161);
+    return Math.round(bmr * 1.2);
+  }, [currentWeight, userHeight, userAge, userGender]);
 
   const load = useCallback(async () => {
     const thirtyDaysAgo = new Date();
@@ -139,11 +152,11 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
         .eq("user_id", userId).gte("logged_at", from),
       supabase
         .from("sport_entries")
-        .select("id,entry_date,activity_name,amount,unit")
+        .select("id,entry_date,activity_name,amount,unit,burned_kcal")
         .eq("user_id", userId).gte("entry_date", from)
         .order("created_at", { ascending: true }),
       supabase.from("body_profile")
-        .select("current_weight,goal_weight")
+        .select("current_weight,goal_weight,height_cm,age,gender")
         .eq("user_id", userId).maybeSingle(),
     ]);
 
@@ -172,7 +185,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     for (const row of sportData ?? []) {
       if (!sd[row.entry_date]) sd[row.entry_date] = [];
       sd[row.entry_date].push({
-        id: row.id, activity_name: row.activity_name, amount: row.amount, unit: row.unit,
+        id: row.id, activity_name: row.activity_name, amount: row.amount, unit: row.unit, burned_kcal: row.burned_kcal ?? null,
       });
     }
     setSportByDate(sd);
@@ -180,10 +193,44 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     if (profileData) {
       setCurrentWeight(profileData.current_weight != null ? parseFloat(profileData.current_weight) : null);
       setGoalWeight(profileData.goal_weight != null ? parseFloat(profileData.goal_weight) : null);
+      setUserHeight(profileData.height_cm ?? null);
+      setUserAge(profileData.age ?? null);
+      setUserGender((profileData.gender as "male" | "female") ?? null);
     }
   }, [userId]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Sport-burned sum per day
+  const sportBurnedByDate = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const [date, items] of Object.entries(sportByDate)) {
+      result[date] = items.reduce((s, e) => s + (e.burned_kcal ?? 0), 0);
+    }
+    return result;
+  }, [sportByDate]);
+
+  // Toast if no sport for more than 3 days
+  useEffect(() => {
+    if (sportToastRef.current || history.length === 0) return;
+    const threshold = new Date();
+    threshold.setDate(threshold.getDate() - 3);
+    const thresholdStr = threshold.toISOString().split("T")[0];
+    const hasRecentSport = Object.keys(sportByDate).some((d) => d >= thresholdStr);
+    if (!hasRecentSport) {
+      sportToastRef.current = true;
+      const lastDate = Object.keys(sportByDate).sort().reverse()[0];
+      const daysSince = lastDate
+        ? Math.floor((Date.now() - new Date(lastDate).getTime()) / 86400000)
+        : null;
+      toast("Zeit für Sport! 💪", {
+        description: daysSince
+          ? `Dein letztes Training war vor ${daysSince} Tagen. Bleib aktiv!`
+          : "Du hast noch kein Training eingetragen. Fang heute an!",
+        duration: 8000,
+      });
+    }
+  }, [history, sportByDate]);
 
   function toggleDay(date: string) {
     setExpandedDays((prev) => {
@@ -221,12 +268,23 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   }
 
   // Summary stats (all 30 tracked days)
-  const daysUnder = history.filter((d) => d.total <= budget).length;
+  const weightForStats = currentWeight ?? 75;
+  const daysUnder = history.filter((d) => {
+    const sportB = sportBurnedByDate[d.date] ?? 0;
+    const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (weightForStats / 75));
+    const effBudget = baseTdee ? (baseTdee - deficit) + sportB + stepB : budget + sportB + stepB;
+    return d.total <= effBudget;
+  }).length;
   const stepsValues = Object.values(stepsMap).filter((v) => v > 0);
   const avgStepsVal = stepsValues.length > 0
     ? Math.round(stepsValues.reduce((s, v) => s + v, 0) / stepsValues.length) : 0;
   const avgDiffAll = history.length > 0
-    ? Math.round(history.reduce((s, d) => s + (d.total - budget), 0) / history.length) : 0;
+    ? Math.round(history.reduce((s, d) => {
+        const sportB = sportBurnedByDate[d.date] ?? 0;
+        const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (weightForStats / 75));
+        const effBudget = baseTdee ? (baseTdee - deficit) + sportB + stepB : budget + sportB + stepB;
+        return s + (d.total - effBudget);
+      }, 0) / history.length) : 0;
   const diffDesc = avgDiffAll > 0 ? t.overGoalText : avgDiffAll < 0 ? t.underGoalText : t.exactGoalText;
   const diffDescColor = avgDiffAll > 0
     ? "text-red-500 dark:text-red-400"
@@ -245,13 +303,24 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     if (n === 0) return null;
 
     const avgCal = Math.round(days.reduce((s, d) => s + d.total, 0) / n);
-    const avgDiff = Math.round(days.reduce((s, d) => s + (d.total - budget), 0) / n);
+    const w = weightForStats;
+    const avgDiff = Math.round(days.reduce((s, d) => {
+      const sportB = sportBurnedByDate[d.date] ?? 0;
+      const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (w / 75));
+      const effBudget = baseTdee ? (baseTdee - deficit) + sportB + stepB : budget + sportB + stepB;
+      return s + (d.total - effBudget);
+    }, 0) / n);
     const avgRealDeficit = hasTdeeData
-      ? Math.round(days.reduce((s, d) => s + (tdee - d.total), 0) / n)
+      ? Math.round(days.reduce((s, d) => {
+          const sportB = sportBurnedByDate[d.date] ?? 0;
+          const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (w / 75));
+          const maintenance = (baseTdee ?? tdee) + sportB + stepB;
+          return s + (maintenance - d.total);
+        }, 0) / n)
       : null;
 
     return { n, avgCal, avgDiff, avgRealDeficit };
-  }, [history, budget, tdee, hasTdeeData, analysisPeriod]);
+  }, [history, budget, deficit, tdee, hasTdeeData, analysisPeriod, sportBurnedByDate, stepsMap, baseTdee, weightForStats]);
 
   // Prognosis
   const prognosis = useMemo((): PrognosisResult => {
@@ -489,16 +558,24 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
         ) : (
           <div className="space-y-2">
             {history.map((day) => {
-              const steps        = stepsMap[day.date] ?? 0;
-              const burned       = Math.round(steps * 0.04);
-              const diffToTarget = day.total - budget;
-              const over         = day.total > budget;
-              const pct          = Math.min((day.total / budget) * 100, 100);
+              const steps          = stepsMap[day.date] ?? 0;
+              const weightForCalc  = currentWeight ?? 75;
+              const burned         = Math.round(steps * 0.04 * (weightForCalc / 75));
+              const sportBurnedDay = sportBurnedByDate[day.date] ?? 0;
+              // Dynamic: baseTdee + net activity − deficit; fallback to stored budget
+              const effectiveDayBudget = baseTdee
+                ? (baseTdee - deficit) + burned + sportBurnedDay
+                : budget + burned + sportBurnedDay;
+              // Consistent realDeficit: maintenance − consumed
+              const maintenanceToday = (baseTdee ?? tdee) + burned + sportBurnedDay;
+              const diffToTarget = day.total - effectiveDayBudget;
+              const over         = day.total > effectiveDayBudget;
+              const pct          = Math.min((day.total / effectiveDayBudget) * 100, 100);
               const isToday      = day.date === new Date().toISOString().split("T")[0];
               const expanded     = expandedDays.has(day.date);
               const items        = foodByDate[day.date]  ?? [];
               const sportItems   = sportByDate[day.date] ?? [];
-              const realDeficit  = hasTdeeData ? tdee - day.total : null;
+              const realDeficit  = hasTdeeData ? maintenanceToday - day.total : null;
 
               return (
                 <div key={day.date} className="border border-black/[0.06] dark:border-white/[0.07] rounded-xl overflow-hidden">
@@ -519,6 +596,11 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                         {steps > 0 && (
                           <span className="hidden sm:flex text-xs text-teal-600 dark:text-teal-400 font-medium items-center gap-0.5">
                             <Activity size={11} /> {steps.toLocaleString(locale)}
+                          </span>
+                        )}
+                        {sportBurnedDay > 0 && (
+                          <span className="text-xs text-orange-500 dark:text-orange-400 font-medium flex items-center gap-0.5">
+                            <Dumbbell size={11} /> -{sportBurnedDay}
                           </span>
                         )}
                         {!over && (
@@ -563,11 +645,21 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                       <div className="px-4 py-2 flex items-center gap-3 flex-wrap bg-slate-50/50 dark:bg-white/[0.02]">
                         <span className="text-xs text-slate-500">
                           {t.calorieTargetLabel}:{" "}
-                          <span className="font-semibold text-slate-700 dark:text-slate-300">{budget} kcal</span>
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">{effectiveDayBudget} kcal</span>
+                          {(sportBurnedDay > 0 || burned > 0) && (
+                            <span className="text-slate-400 ml-1">
+                              ({budget}{sportBurnedDay > 0 ? ` +${sportBurnedDay} Sport` : ""}{burned > 0 ? ` +${burned} Schr.` : ""})
+                            </span>
+                          )}
                         </span>
                         <span className={`text-xs font-semibold ${diffToTarget > 0 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>
                           {t.differenceToTargetLabel}: {diffToTarget > 0 ? "+" : ""}{diffToTarget} kcal
                         </span>
+                        {sportBurnedDay > 0 && (
+                          <span className="text-xs font-semibold text-orange-500 dark:text-orange-400">
+                            Sport: -{sportBurnedDay} kcal
+                          </span>
+                        )}
                         {realDeficit !== null && (
                           <span className={`text-xs font-semibold ${realDeficit > 0 ? "text-blue-600 dark:text-blue-400" : "text-orange-500 dark:text-orange-400"}`}>
                             {t.realDeficitLabel}: {realDeficit} kcal
@@ -619,12 +711,24 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
                             <div key={s.id} className="px-4 py-2.5 flex items-center justify-between bg-emerald-500/[0.03]">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 <Dumbbell size={12} className="text-emerald-500 dark:text-emerald-400 shrink-0" />
-                                <p className="text-sm text-slate-700 dark:text-slate-300 truncate">{s.activity_name}</p>
+                                <div className="min-w-0">
+                                  <p className="text-sm text-slate-700 dark:text-slate-300 truncate">{s.activity_name}</p>
+                                  <p className="text-xs text-slate-400 mt-0.5">
+                                    {Number(s.amount) % 1 === 0 ? s.amount : Number(s.amount).toFixed(1)}{" "}
+                                    {s.unit}
+                                  </p>
+                                </div>
                               </div>
-                              <span className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 ml-3 shrink-0">
-                                {Number(s.amount) % 1 === 0 ? s.amount : Number(s.amount).toFixed(1)}
-                                <span className="text-xs font-normal text-slate-400 ml-1">{s.unit}</span>
-                              </span>
+                              {s.burned_kcal != null && s.burned_kcal > 0 ? (
+                                <span className="text-sm font-semibold tabular-nums text-orange-500 dark:text-orange-400 ml-3 shrink-0">
+                                  -{s.burned_kcal} <span className="text-xs font-normal text-slate-400">kcal</span>
+                                </span>
+                              ) : (
+                                <span className="text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400 ml-3 shrink-0">
+                                  {Number(s.amount) % 1 === 0 ? s.amount : Number(s.amount).toFixed(1)}
+                                  <span className="text-xs font-normal text-slate-400 ml-1">{s.unit}</span>
+                                </span>
+                              )}
                             </div>
                           ))}
                         </>
