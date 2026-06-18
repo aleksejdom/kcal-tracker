@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { getLocalDateKey, msUntilMidnight } from "@/lib/dateUtils";
 import { Dumbbell, Plus, Trash2, Trophy, Flame, ChevronDown, Check, Activity } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/context/LanguageContext";
@@ -79,9 +80,15 @@ export default function SportTab({ userId }: Props) {
   const [burnedKcal,   setBurnedKcal]   = useState("");
   const [userWeight,   setUserWeight]   = useState(75);
 
-  const now   = new Date();
-  const today = now.toISOString().split("T")[0];
+  const [today, setToday] = useState(getLocalDateKey);
 
+  // Auto-refresh at local midnight
+  useEffect(() => {
+    const timer = setTimeout(() => setToday(getLocalDateKey()), msUntilMidnight());
+    return () => clearTimeout(timer);
+  }, [today]);
+
+  const now = new Date();
   const thisMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
   const lastMonthDate  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const lastMonthStart = `${lastMonthDate.getFullYear()}-${String(lastMonthDate.getMonth() + 1).padStart(2, "0")}-01`;

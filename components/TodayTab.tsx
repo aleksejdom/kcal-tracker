@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
+import { getLocalDateKey, msUntilMidnight } from "@/lib/dateUtils";
 import ProductSearch, { Product } from "@/components/ProductSearch";
 import { Pencil, X, Plus, Check, Trash2, ChevronRight, Beef, Droplets, Wheat } from "lucide-react";
 import { toast } from "sonner";
@@ -26,8 +27,6 @@ interface Props {
   refreshKey?: number;
 }
 
-function getTodayKey() { return new Date().toISOString().split("T")[0]; }
-
 export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsChange, refreshKey }: Props) {
   const { t } = useLanguage();
   const [entries, setEntries]             = useState<FoodEntry[]>([]);
@@ -40,8 +39,13 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
   const [saving, setSaving]               = useState(false);
   const [todaySteps, setTodaySteps]       = useState(0);
   const [sportBurned, setSportBurned]     = useState(0);
+  const [today, setToday]                 = useState(getLocalDateKey);
 
-  const today    = getTodayKey();
+  // Auto-refresh at local midnight
+  useEffect(() => {
+    const timer = setTimeout(() => setToday(getLocalDateKey()), msUntilMidnight());
+    return () => clearTimeout(timer);
+  }, [today]);
   const consumed = entries.reduce((s, e) => s + e.calories, 0);
   const totalProtein = Math.round(entries.reduce((s, e) => s + Number(e.protein), 0) * 10) / 10;
   const totalFat     = Math.round(entries.reduce((s, e) => s + Number(e.fat), 0) * 10) / 10;
@@ -87,9 +91,9 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
   const loadTodaySteps = useCallback(async () => {
     const { data } = await supabase
       .from("daily_steps").select("steps")
-      .eq("user_id", userId).eq("logged_at", getTodayKey()).maybeSingle();
+      .eq("user_id", userId).eq("logged_at", today).maybeSingle();
     setTodaySteps(data?.steps ?? 0);
-  }, [userId]);
+  }, [userId, today]);
 
   const loadSportBurned = useCallback(async () => {
     const { data } = await supabase

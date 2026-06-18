@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { getLocalDateKey } from "@/lib/dateUtils";
 import { supabase } from "@/lib/supabase";
 import { TrendingDown, TrendingUp, Minus, Trash2, Activity, ChevronDown, Dumbbell, Target, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -262,7 +263,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   }
 
   function fmtDate(d: string) {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateKey();
     if (d === today) return t.todayLabel;
     return new Date(d + "T00:00:00").toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
   }
@@ -571,7 +572,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
               const diffToTarget = day.total - effectiveDayBudget;
               const over         = day.total > effectiveDayBudget;
               const pct          = Math.min((day.total / effectiveDayBudget) * 100, 100);
-              const isToday      = day.date === new Date().toISOString().split("T")[0];
+              const isToday      = day.date === getLocalDateKey();
               const expanded     = expandedDays.has(day.date);
               const items        = foodByDate[day.date]  ?? [];
               const sportItems   = sportByDate[day.date] ?? [];

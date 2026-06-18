@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { getLocalDateKey } from "@/lib/dateUtils";
 import { supabase } from "@/lib/supabase";
 import { Check, Scale, Trash2, TrendingDown, TrendingUp, Minus, Target, Info } from "lucide-react";
 import { toast } from "sonner";
@@ -181,7 +182,7 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
   const chartEntries = useMemo(() => {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - PERIOD_DAYS[period]);
-    const cutoffStr = cutoff.toISOString().split("T")[0];
+    const cutoffStr = getLocalDateKey(cutoff);
     return weightLog.filter((e) => e.logged_at >= cutoffStr);
   }, [weightLog, period]);
 
@@ -233,7 +234,7 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
     if (!weightInput) return;
     setSaving(true);
     const w = parseFloat(weightInput);
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateKey();
     await supabase.from("weight_log").upsert({ user_id: userId, weight: w, logged_at: today }, { onConflict: "user_id,logged_at" });
     await supabase.from("body_profile").upsert({ user_id: userId, current_weight: w }, { onConflict: "user_id" });
     setProfile((p) => ({ ...p, current_weight: w.toString() }));
@@ -298,7 +299,7 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
 
   const locale = lang === "ru" ? "ru-RU" : "de-DE";
   function fmtDate(d: string) {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateKey();
     if (d === today) return t.todayLabel;
     return new Date(d + "T00:00:00").toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
   }
@@ -635,7 +636,7 @@ export default function KoerperTab({ userId, onProfileSaved, onGoalsApplied }: P
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">{t.weightHistoryTitle}</p>
             <div className="space-y-1">
               {recentLog.map((entry) => {
-                const isToday = entry.logged_at === new Date().toISOString().split("T")[0];
+                const isToday = entry.logged_at === getLocalDateKey();
                 return (
                   <div key={entry.id} className="flex items-center justify-between py-2 border-b border-black/[0.04] dark:border-white/[0.05] last:border-0">
                     <span className={`text-sm ${isToday ? "font-semibold text-slate-900 dark:text-white" : "text-slate-600 dark:text-slate-400"}`}>
