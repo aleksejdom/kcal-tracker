@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { getLocalDateKey, msUntilMidnight } from "@/lib/dateUtils";
 import ProductSearch, { Product } from "@/components/ProductSearch";
-import { Pencil, X, Plus, Check, Trash2, ChevronRight, Beef, Droplets, Wheat } from "lucide-react";
+import { Pencil, X, Plus, Check, Trash2, ChevronRight, Beef, Droplets, Wheat, Calculator } from "lucide-react";
 import { toast } from "sonner";
 import { useLanguage } from "@/context/LanguageContext";
 
@@ -18,9 +18,6 @@ interface BodyProfile {
   height_cm: number | null; age: number | null; gender: "male" | "female" | null;
 }
 
-function mifflin(weightKg: number, heightCm: number, age: number, gender: "male" | "female"): number {
-  return 10 * weightKg + 6.25 * heightCm - 5 * age + (gender === "male" ? 5 : -161);
-}
 interface Props {
   userId: string; settings: Settings;
   onGoToKoerper: () => void; onSettingsChange: (s: Settings) => void;
@@ -40,6 +37,10 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
   const [todaySteps, setTodaySteps]       = useState(0);
   const [sportBurned, setSportBurned]     = useState(0);
   const [today, setToday]                 = useState(getLocalDateKey);
+  const [showCalc, setShowCalc]           = useState(false);
+  const [calcExpr, setCalcExpr]           = useState("");
+  const [calcResult, setCalcResult]       = useState<string | null>(null);
+  const [calcError, setCalcError]         = useState(false);
 
   // Auto-refresh at local midnight
   useEffect(() => {
@@ -51,18 +52,9 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
   const totalFat     = Math.round(entries.reduce((s, e) => s + Number(e.fat), 0) * 10) / 10;
   const totalCarbs   = Math.round(entries.reduce((s, e) => s + Number(e.carbs), 0) * 10) / 10;
 
-  // Dynamic budget: baseTDEE = BMR × 1.2 (sedentary) + net activity − target deficit
   const userWeight = Number(bodyProfile?.current_weight ?? bodyProfile?.start_weight ?? 75);
-  const bmr = bodyProfile?.height_cm && bodyProfile?.age && bodyProfile?.gender
-    ? mifflin(userWeight, bodyProfile.height_cm, bodyProfile.age, bodyProfile.gender)
-    : null;
-  const baseTdee = bmr ? Math.round(bmr * 1.2) : null;
-  // Weight-scaled steps (net: already excludes rest — steps are net activity)
   const burnedFromSteps = Math.round(todaySteps * 0.04 * (userWeight / 75));
-  // effectiveBudget: dynamic if BMR data available, else fall back to stored budget
-  const effectiveBudget = baseTdee
-    ? (baseTdee - settings.deficit) + burnedFromSteps + sportBurned
-    : settings.budget + burnedFromSteps + sportBurned;
+  const effectiveBudget = settings.budget + burnedFromSteps + sportBurned;
   const remaining = effectiveBudget - consumed;
   const pct       = Math.min((consumed / effectiveBudget) * 100, 100);
   const isOver    = remaining < 0;
@@ -141,6 +133,46 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
     onSettingsChange({ ...settings, budget: val });
     setEditingGoal(false);
     toast.success(t.toastGoalSaved, { description: `${val} kcal` });
+  }
+
+  function safeCalc(expr: string): string {
+    if (!expr.trim()) return "";
+    const s = expr.replace(/,/g, ".").replace(/÷/g, "/").replace(/×/g, "*");
+    if (!/^[\d+\-*/.() ]+$/.test(s)) return "Fehler";
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval
+      const r = new Function(`"use strict";return(${s})`)() as number;
+      if (typeof r !== "number" || !isFinite(r)) return "Fehler";
+      return String(Math.round(r * 10000) / 10000);
+    } catch {
+      return "Fehler";
+    }
+  }
+
+  function calcPress(key: string) {
+    if (key === "C") { setCalcExpr(""); setCalcResult(null); setCalcError(false); return; }
+    if (key === "←") { setCalcExpr((e) => e.slice(0, -1)); setCalcResult(null); setCalcError(false); return; }
+    if (key === "=") {
+      const res = safeCalc(calcExpr);
+      if (res === "Fehler" || res === "") { setCalcError(true); return; }
+      setCalcResult(res); setCalcError(false); return;
+    }
+    // Operator after result: chain calculation
+    if (calcResult !== null && /[+\-*/÷×]/.test(key)) {
+      setCalcExpr(calcResult + key); setCalcResult(null); setCalcError(false); return;
+    }
+    // New number after result: start fresh
+    if (calcResult !== null && /\d/.test(key)) {
+      setCalcExpr(key); setCalcResult(null); setCalcError(false); return;
+    }
+    setCalcError(false);
+    setCalcExpr((e) => e + key);
+  }
+
+  function useCalcResult() {
+    const val = calcResult ?? safeCalc(calcExpr);
+    const n = parseFloat(val);
+    if (!isNaN(n) && n > 0) { setAmount(String(Math.round(n))); setShowCalc(false); }
   }
 
   const startW   = bodyProfile?.start_weight   ?? null;
@@ -285,9 +317,95 @@ export default function TodayTab({ userId, settings, onGoToKoerper, onSettingsCh
 
         {/* 2 — Meal entry: mobile 2nd · desktop col2 row1 */}
         <div className={`${card} p-5 lg:col-start-2 lg:row-start-1`}>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-4">
-            {t.mealCapture}
-          </p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
+              {t.mealCapture}
+            </p>
+            <button
+              onClick={() => { setShowCalc((v) => !v); setCalcExpr(""); setCalcResult(null); setCalcError(false); }}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg transition-all ${
+                showCalc
+                  ? "text-white"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-white hover:bg-black/[0.06] dark:hover:bg-white/[0.10]"
+              }`}
+              style={showCalc ? { background: "linear-gradient(135deg, #3b82f6, #6366f1)" } : {}}
+            >
+              <Calculator size={13} />
+              Rechner
+            </button>
+          </div>
+
+          {/* ── Taschenrechner ── */}
+          {showCalc && (
+            <div className="mb-4 bg-black/[0.03] dark:bg-white/[0.04] border border-black/[0.06] dark:border-white/[0.07] rounded-2xl p-3">
+              {/* Display */}
+              <div className="bg-black/[0.05] dark:bg-black/[0.30] rounded-xl px-3 py-2.5 mb-2.5 min-h-[56px] flex flex-col items-end justify-center">
+                <p className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-full text-right leading-tight">
+                  {calcExpr || "0"}
+                </p>
+                <p className={`text-xl font-bold tabular-nums leading-tight mt-0.5 ${
+                  calcError ? "text-red-500" : calcResult !== null ? "text-blue-500 dark:text-blue-400" : "text-slate-900 dark:text-white"
+                }`}>
+                  {calcError ? "Fehler" : calcResult !== null ? calcResult : ""}
+                </p>
+              </div>
+
+              {/* Buttons grid */}
+              {(() => {
+                const btn = (key: string, label?: string, cls?: string) => (
+                  <button
+                    key={key}
+                    onClick={() => calcPress(key)}
+                    className={`h-10 rounded-xl text-sm font-semibold transition-all active:scale-95 ${cls ?? "bg-black/[0.06] dark:bg-white/[0.08] text-slate-700 dark:text-slate-200 hover:bg-black/[0.10] dark:hover:bg-white/[0.14]"}`}
+                  >
+                    {label ?? key}
+                  </button>
+                );
+                return (
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {btn("C", "C", "bg-red-500/15 dark:bg-red-500/20 text-red-600 dark:text-red-400 hover:bg-red-500/25 font-bold")}
+                    {btn("←", undefined, "bg-black/[0.06] dark:bg-white/[0.08] text-slate-500 dark:text-slate-400 hover:bg-black/[0.10] dark:hover:bg-white/[0.14]")}
+                    {btn("÷", undefined, "bg-violet-500/15 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 font-bold")}
+                    {btn("×", undefined, "bg-violet-500/15 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 font-bold")}
+
+                    {btn("7")} {btn("8")} {btn("9")}
+                    {btn("-", undefined, "bg-violet-500/15 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 font-bold")}
+
+                    {btn("4")} {btn("5")} {btn("6")}
+                    {btn("+", undefined, "bg-violet-500/15 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400 hover:bg-violet-500/25 font-bold")}
+
+                    {btn("1")} {btn("2")} {btn("3")}
+                    <button
+                      onClick={() => calcPress("=")}
+                      className="row-span-2 h-[84px] rounded-xl text-sm font-bold transition-all active:scale-95 text-white"
+                      style={{ background: "linear-gradient(135deg, #3b82f6, #6366f1)" }}
+                    >
+                      =
+                    </button>
+
+                    <button
+                      onClick={() => calcPress("0")}
+                      className="col-span-2 h-10 rounded-xl text-sm font-semibold transition-all active:scale-95 bg-black/[0.06] dark:bg-white/[0.08] text-slate-700 dark:text-slate-200 hover:bg-black/[0.10] dark:hover:bg-white/[0.14]"
+                    >
+                      0
+                    </button>
+                    {btn(".")}
+                  </div>
+                );
+              })()}
+
+              {/* Use result button */}
+              {(calcResult !== null || calcExpr) && !calcError && (
+                <button
+                  onClick={useCalcResult}
+                  className="mt-2.5 w-full flex items-center justify-center gap-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/15 border border-blue-500/20 rounded-xl py-2 transition-all"
+                >
+                  <Plus size={12} /> Ergebnis als Menge übernehmen
+                </button>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2.5">
             <ProductSearch
               value={productName}

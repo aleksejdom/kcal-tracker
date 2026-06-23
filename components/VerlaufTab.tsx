@@ -115,22 +115,12 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
   const [currentWeight, setCurrentWeight] = useState<number | null>(null);
   const [goalWeight, setGoalWeight]     = useState<number | null>(null);
-  const [userHeight, setUserHeight]     = useState<number | null>(null);
-  const [userAge, setUserAge]           = useState<number | null>(null);
-  const [userGender, setUserGender]     = useState<"male" | "female" | null>(null);
   const [analysisPeriod, setAnalysisPeriod] = useState<7 | 30>(7);
   const sportToastRef = useRef(false);
 
   const locale = lang === "ru" ? "ru-RU" : "de-DE";
   const tdee = budget + deficit;
   const hasTdeeData = deficit > 0;
-
-  // Dynamic baseTdee from body profile (BMR × 1.2 sedentary baseline)
-  const baseTdee = useMemo(() => {
-    if (!currentWeight || !userHeight || !userAge || !userGender) return null;
-    const bmr = 10 * currentWeight + 6.25 * userHeight - 5 * userAge + (userGender === "male" ? 5 : -161);
-    return Math.round(bmr * 1.2);
-  }, [currentWeight, userHeight, userAge, userGender]);
 
   const load = useCallback(async () => {
     const thirtyDaysAgo = new Date();
@@ -157,7 +147,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
         .eq("user_id", userId).gte("entry_date", from)
         .order("created_at", { ascending: true }),
       supabase.from("body_profile")
-        .select("current_weight,goal_weight,height_cm,age,gender")
+        .select("current_weight,goal_weight")
         .eq("user_id", userId).maybeSingle(),
     ]);
 
@@ -194,9 +184,6 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     if (profileData) {
       setCurrentWeight(profileData.current_weight != null ? parseFloat(profileData.current_weight) : null);
       setGoalWeight(profileData.goal_weight != null ? parseFloat(profileData.goal_weight) : null);
-      setUserHeight(profileData.height_cm ?? null);
-      setUserAge(profileData.age ?? null);
-      setUserGender((profileData.gender as "male" | "female") ?? null);
     }
   }, [userId]);
 
@@ -273,7 +260,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
   const daysUnder = history.filter((d) => {
     const sportB = sportBurnedByDate[d.date] ?? 0;
     const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (weightForStats / 75));
-    const effBudget = baseTdee ? (baseTdee - deficit) + sportB + stepB : budget + sportB + stepB;
+    const effBudget = budget + sportB + stepB;
     return d.total <= effBudget;
   }).length;
   const stepsValues = Object.values(stepsMap).filter((v) => v > 0);
@@ -283,7 +270,7 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     ? Math.round(history.reduce((s, d) => {
         const sportB = sportBurnedByDate[d.date] ?? 0;
         const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (weightForStats / 75));
-        const effBudget = baseTdee ? (baseTdee - deficit) + sportB + stepB : budget + sportB + stepB;
+        const effBudget = budget + sportB + stepB;
         return s + (d.total - effBudget);
       }, 0) / history.length) : 0;
   const diffDesc = avgDiffAll > 0 ? t.overGoalText : avgDiffAll < 0 ? t.underGoalText : t.exactGoalText;
@@ -308,20 +295,20 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
     const avgDiff = Math.round(days.reduce((s, d) => {
       const sportB = sportBurnedByDate[d.date] ?? 0;
       const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (w / 75));
-      const effBudget = baseTdee ? (baseTdee - deficit) + sportB + stepB : budget + sportB + stepB;
+      const effBudget = budget + sportB + stepB;
       return s + (d.total - effBudget);
     }, 0) / n);
     const avgRealDeficit = hasTdeeData
       ? Math.round(days.reduce((s, d) => {
           const sportB = sportBurnedByDate[d.date] ?? 0;
           const stepB  = Math.round((stepsMap[d.date] ?? 0) * 0.04 * (w / 75));
-          const maintenance = (baseTdee ?? tdee) + sportB + stepB;
+          const maintenance = tdee + sportB + stepB;
           return s + (maintenance - d.total);
         }, 0) / n)
       : null;
 
     return { n, avgCal, avgDiff, avgRealDeficit };
-  }, [history, budget, deficit, tdee, hasTdeeData, analysisPeriod, sportBurnedByDate, stepsMap, baseTdee, weightForStats]);
+  }, [history, budget, deficit, tdee, hasTdeeData, analysisPeriod, sportBurnedByDate, stepsMap, weightForStats]);
 
   // Prognosis
   const prognosis = useMemo((): PrognosisResult => {
@@ -563,12 +550,8 @@ export default function VerlaufTab({ userId, budget, deficit }: Props) {
               const weightForCalc  = currentWeight ?? 75;
               const burned         = Math.round(steps * 0.04 * (weightForCalc / 75));
               const sportBurnedDay = sportBurnedByDate[day.date] ?? 0;
-              // Dynamic: baseTdee + net activity − deficit; fallback to stored budget
-              const effectiveDayBudget = baseTdee
-                ? (baseTdee - deficit) + burned + sportBurnedDay
-                : budget + burned + sportBurnedDay;
-              // Consistent realDeficit: maintenance − consumed
-              const maintenanceToday = (baseTdee ?? tdee) + burned + sportBurnedDay;
+              const effectiveDayBudget = budget + burned + sportBurnedDay;
+              const maintenanceToday = tdee + burned + sportBurnedDay;
               const diffToTarget = day.total - effectiveDayBudget;
               const over         = day.total > effectiveDayBudget;
               const pct          = Math.min((day.total / effectiveDayBudget) * 100, 100);
